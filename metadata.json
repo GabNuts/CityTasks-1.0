@@ -1,0 +1,5 @@
+{
+  "name": "CityTask",
+  "description": "Um gerenciador de tarefas gamificado onde sua produtividade constrói uma cidade visualizada por IA.",
+  "requestFramePermissions": []
+}
