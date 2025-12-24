@@ -101,7 +101,7 @@ export const renderComGeneralStore = (lot: THREE.Group, variant: number, isRare:
   const awningZ = 0.45;
   for(let i=-0.8; i<=0.8; i+=0.2) {
       const color = Math.abs(Math.round(i*5)) % 2 === 0 ? awningColors[0] : awningColors[1];
-      const segment = createBox(0.2, 0.05, 0.4, color, i, 0.6, awningZ, isNight));
+      const segment = createBox(0.2, 0.05, 0.4, color, i, 0.6, awningZ, isNight);
       segment.rotation.x = 0.3;
       lot.add(segment);
   }
@@ -122,7 +122,7 @@ export const renderComGeneralStore = (lot: THREE.Group, variant: number, isRare:
       lot.add(createBox(0.15, 0.1, 0.1, 0xd32f2f, -0.6, 0.35, 0.6, isNight));
   }
 
-  const signPost = createBox(0.05, 0.05, 0.4, 0x333333, 0.8, 0.7, 0.5, isNight));
+  const signPost = createBox(0.05, 0.05, 0.4, 0x333333, 0.8, 0.7, 0.5, isNight);
   lot.add(signPost);
   addComSign(lot, 0.8, 0.55, 0.7, Math.PI/2, isBakery ? '#5d4037' : '#e65100', isBakery ? "BAKERY" : "TOOLS", 0.3, false, isNight);
 
@@ -315,7 +315,7 @@ export const renderComOfficeTower = (lot: THREE.Group, variant: number, isRare: 
     lot.add(createBush(-1.2, -1.2, 0.8, isNight));
     if (isRare) {
          lot.add(createBox(0.1, 2.0, 0.1, 0xffffff, 0, 0.9 + floors*floorH + 1.0, 0, isNight));
-         const light = createBox(0.1, 0.1, 0.1, 0xff0000, 0, 0.9 + floors*floorH + 2.0, 0, isNight));
+         const light = createBox(0.1, 0.1, 0.1, 0xff0000, 0, 0.9 + floors*floorH + 2.0, 0, isNight);
          if(isNight) (light.material as THREE.MeshStandardMaterial).emissive.setHex(0xff0000);
          lot.add(light);
     } else {

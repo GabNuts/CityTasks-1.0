@@ -78,8 +78,7 @@ const RARE_CARS_LIST = [
     { id: 'ecto1', name: 'Ecto-1 (Caça-Fantasmas)' },
     { id: 'jp_jeep', name: 'Jipe do Parque dos Dinossauros' },
     { id: 'tron_bike', name: 'Moto de Luz (Tron)' },
-    { id: 'batmobile', name: 'Batmóvel' }
-    { id: 'ecto1', name: 'Ecto1 (Caça Fantasmas)' },
+    { id: 'batmobile', name: 'Batmóvel' },    
     { id: 'ghost_rider', name: 'Moto do Motoqueiro Fantasma' },
     { id: 'mystery_machine', name: 'Van do Scooby Doo' },
     { id: 'mcqueen', name: 'Relâmpago McQueen' },
