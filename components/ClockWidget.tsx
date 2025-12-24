@@ -90,6 +90,8 @@ const ClockWidget: React.FC<ClockWidgetProps> = ({ gameCreatedAt }) => {
   });
 
   const [isEditingAlarm, setIsEditingAlarm] = useState<string | null>(null);
+  // Estado para controlar qual alarme está sendo deletado (substitui window.confirm)
+  const [deleteConfirmationId, setDeleteConfirmationId] = useState<string | null>(null);
   
   const [alarmForm, setAlarmForm] = useState<Alarm>({
       id: '', type: 'fixed', time: '08:00', days: [], intervalMinutes: 60,
@@ -287,23 +289,29 @@ const ClockWidget: React.FC<ClockWidgetProps> = ({ gameCreatedAt }) => {
       setIsEditingAlarm(null);
   };
 
-  const handleDeleteAlarm = (e: React.MouseEvent, id: string) => {
+  const handleRequestDelete = (e: React.MouseEvent, id: string) => {
       e.stopPropagation(); // IMPORTANTE: Impede que o clique propague para outros elementos
-      
+      setDeleteConfirmationId(id);
+  };
+
+  const confirmDeleteAlarm = () => {
+      if (!deleteConfirmationId) return;
+      const id = deleteConfirmationId;
+
       // Se o alarme a ser deletado estiver tocando, para ele
       if (activeAlarmId === id) {
           stopAlarm();
       }
 
-      if (window.confirm('Deletar este alarme permanentemente?')) {
-          // Usa String() em ambos os lados para garantir comparação correta (v1 vs v2 IDs)
-          setAlarms(prev => prev.filter(a => String(a.id) !== String(id)));
-          
-          // Tenta limpar o áudio em background sem bloquear
-          deleteAudioBlob(id).catch(err => {
-              console.warn("Falha ao limpar áudio do alarme deletado (pode ser ignorado):", err);
-          });
-      }
+      // Usa String() em ambos os lados para garantir comparação correta (v1 vs v2 IDs)
+      setAlarms(prev => prev.filter(a => String(a.id) !== String(id)));
+      
+      // Tenta limpar o áudio em background sem bloquear
+      deleteAudioBlob(id).catch(err => {
+          console.warn("Falha ao limpar áudio do alarme deletado (pode ser ignorado):", err);
+      });
+
+      setDeleteConfirmationId(null);
   };
 
   const handleAudioUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -314,7 +322,8 @@ const ClockWidget: React.FC<ClockWidgetProps> = ({ gameCreatedAt }) => {
             await saveAudioBlob(tempId, file);
             setAlarmForm({ ...alarmForm, id: tempId, hasCustomAudio: true });
           } catch(e) {
-            alert("Erro ao salvar áudio. Tente um arquivo menor.");
+            // Pequeno fallback para evitar alert nativo
+            console.error("Erro ao salvar audio");
           }
       }
   };
@@ -472,8 +481,33 @@ const ClockWidget: React.FC<ClockWidgetProps> = ({ gameCreatedAt }) => {
       {/* MAIN MODAL */}
       {isOpen && !activeAlarmId && !timerFinished && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-           <div className="bg-gray-800 border border-gray-600 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+           <div className="bg-gray-800 border border-gray-600 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden relative">
               
+              {/* DELETE CONFIRMATION OVERLAY */}
+              {deleteConfirmationId && (
+                  <div className="absolute inset-0 z-[70] bg-black/80 backdrop-blur-sm flex items-center justify-center animate-in fade-in duration-200">
+                      <div className="bg-gray-800 border border-gray-600 p-6 rounded-xl shadow-2xl text-center max-w-sm w-full mx-4">
+                          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+                          <h3 className="text-xl font-bold text-white mb-2">Excluir Alarme?</h3>
+                          <p className="text-gray-400 text-sm mb-6">Esta ação não pode ser desfeita e você perderá as configurações deste alarme.</p>
+                          <div className="flex gap-4 justify-center">
+                              <button 
+                                onClick={() => setDeleteConfirmationId(null)} 
+                                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg transition-colors font-medium"
+                              >
+                                  Cancelar
+                              </button>
+                              <button 
+                                onClick={confirmDeleteAlarm} 
+                                className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg font-bold transition-colors flex items-center gap-2"
+                              >
+                                  <Trash2 size={16}/> Confirmar Exclusão
+                              </button>
+                          </div>
+                      </div>
+                  </div>
+              )}
+
               <div className="flex justify-between items-center p-4 bg-gray-900 border-b border-gray-700">
                 <div className="flex gap-4">
                   <button onClick={() => setActiveTab('clock')} className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${activeTab === 'clock' ? 'bg-cyan-600 text-white' : 'hover:bg-gray-700 text-gray-400'}`}>
@@ -689,7 +723,7 @@ const ClockWidget: React.FC<ClockWidgetProps> = ({ gameCreatedAt }) => {
                                             className="p-2 hover:bg-gray-800 rounded text-blue-400"
                                          ><Settings size={16}/></button>
                                          <button 
-                                            onClick={(e) => handleDeleteAlarm(e, alarm.id)} 
+                                            onClick={(e) => handleRequestDelete(e, alarm.id)} 
                                             className="p-2 hover:bg-gray-800 rounded text-red-400"
                                             title="Deletar Alarme"
                                          ><Trash2 size={16}/></button>

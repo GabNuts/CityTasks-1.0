@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import TaskList from './components/TaskList';
 import CityDisplay from './components/CityDisplay';
@@ -7,6 +6,7 @@ import MediaPlayer from './components/MediaPlayer';
 import { Task, TaskDifficulty, CityStats, Building, BuildingType, GameState } from './types';
 import { calculateCityMaintenance } from './utils/cityHelpers';
 import { getGameDateString } from './utils/timeHelpers';
+import { AlertTriangle, CheckCircle, Info, X, Save, Upload } from 'lucide-react';
 
 // Simple ID generator
 const generateId = () => Math.random().toString(36).substring(2, 9);
@@ -159,6 +159,14 @@ const BUILDING_CATALOG = {
   }
 };
 
+// --- TYPES FOR NOTIFICATIONS ---
+interface GameNotification {
+  id: string;
+  title: string;
+  message: string;
+  type: 'success' | 'info' | 'warning' | 'error';
+}
+
 export default function App() {
   // --- STATE ---
   const [isLoaded, setIsLoaded] = useState(false);
@@ -169,6 +177,24 @@ export default function App() {
   
   // Placement Mode State
   const [placementMode, setPlacementMode] = useState<{ active: boolean, landmarkId: string | null }>({ active: false, landmarkId: null });
+
+  // --- NOTIFICATION SYSTEM ---
+  const [notification, setNotification] = useState<GameNotification | null>(null);
+  const notificationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showToast = (title: string, message: string, type: 'success' | 'info' | 'warning' | 'error' = 'info') => {
+      if (notificationTimeoutRef.current) clearTimeout(notificationTimeoutRef.current);
+      
+      setNotification({ id: generateId(), title, message, type });
+      
+      notificationTimeoutRef.current = setTimeout(() => {
+          setNotification(null);
+      }, 6000); // 6 segundos de duração
+  };
+
+  // --- CONFIRMATION MODAL STATE ---
+  const [pendingImportFile, setPendingImportFile] = useState<File | null>(null);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
   // --- OPTIMIZATION: OCCUPANCY GRID ---
   const occupiedTilesRef = useRef<Set<string>>(new Set());
@@ -253,7 +279,7 @@ export default function App() {
                 const popLoss = Math.floor(loadedStats.population * 0.10); 
                 loadedStats.population = Math.max(0, loadedStats.population - popLoss);
                 if (popLoss > 0) {
-                    console.warn(`A cidade sofreu com o abandono! -${popLoss} habitantes.`);
+                    showToast("Abandono Urbano", `A cidade sofreu com o abandono! -${popLoss} habitantes.`, "warning");
                 }
             }
 
@@ -266,7 +292,9 @@ export default function App() {
                 if (Math.random() < 0.03) {
                     const wonCar = availableCars[Math.floor(Math.random() * availableCars.length)];
                     loadedGameState.unlockedVehicles.push(wonCar.id);
-                    alert(`🚗 EVENTO RARO! Um veículo lendário apareceu na cidade: ${wonCar.name}!`);
+                    setTimeout(() => {
+                        showToast("🚗 EVENTO RARO!", `Um veículo lendário apareceu na cidade: ${wonCar.name}!`, "success");
+                    }, 2000); // Delay para aparecer após o carregamento inicial
                 }
             }
         }
@@ -310,7 +338,10 @@ export default function App() {
   // --- SAVE BACKUP MANAGEMENT ---
   const handleExportSave = () => {
       const saveString = localStorage.getItem('citytask_save_v1');
-      if (!saveString) { alert("Sem dados para salvar."); return; }
+      if (!saveString) { 
+          showToast("Erro", "Sem dados para salvar.", "error"); 
+          return; 
+      }
       const blob = new Blob([saveString], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -319,14 +350,20 @@ export default function App() {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      showToast("Backup Criado", "Arquivo salvo com sucesso na sua pasta de downloads.", "success");
   };
 
-  const handleImportSave = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImportSaveRequest = (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
-      
-      if (!confirm("Isso irá sobrescrever seu progresso atual. Deseja continuar?")) return;
+      setPendingImportFile(file);
+      setIsImportModalOpen(true);
+      // Reset input value to allow selecting same file again if needed
+      e.target.value = '';
+  };
 
+  const confirmImportSave = () => {
+      if (!pendingImportFile) return;
       const reader = new FileReader();
       reader.onload = (ev) => {
         try {
@@ -335,27 +372,29 @@ export default function App() {
           const parsed = JSON.parse(json);
           if (parsed && parsed.stats && parsed.buildings) {
               localStorage.setItem('citytask_save_v1', json);
-              alert("Backup restaurado com sucesso! A página será recarregada.");
-              window.location.reload();
+              setIsImportModalOpen(false);
+              showToast("Sucesso", "Backup restaurado! Recarregando...", "success");
+              setTimeout(() => window.location.reload(), 1000);
           } else {
               throw new Error("Invalid structure");
           }
         } catch (err) {
-          alert("Erro: Arquivo de save inválido ou corrompido.");
+          showToast("Erro", "Arquivo de save inválido ou corrompido.", "error");
+          setIsImportModalOpen(false);
         }
       };
-      reader.readAsText(file);
+      reader.readAsText(pendingImportFile);
   };
 
   // --- CHEAT FUNCTIONS ---
   const handleCheatBudget = () => {
       setStats(prev => ({ ...prev, budget: prev.budget + 10000 }));
-      alert("CHEAT ATIVADO: +10.000 no Orçamento!");
+      showToast("Cheat Ativado", "+10.000 no Orçamento!", "warning");
   };
 
   const handleCheatPopulation = () => {
       setStats(prev => ({ ...prev, population: prev.population + 5000 }));
-      alert("CHEAT ATIVADO: +5.000 Habitantes!");
+      showToast("Cheat Ativado", "+5.000 Habitantes!", "warning");
   };
 
   const handleUnlockVehicles = () => {
@@ -364,7 +403,7 @@ export default function App() {
           ...prev,
           unlockedVehicles: Array.from(new Set([...prev.unlockedVehicles, ...allCarIds]))
       }));
-      alert("CHEAT ATIVADO: Todos os veículos raros foram desbloqueados e aparecerão nas ruas!");
+      showToast("Garagem Lendária", "Todos os veículos raros desbloqueados!", "success");
   };
 
   // --- CITY BUILDING LOGIC ---
@@ -619,7 +658,7 @@ export default function App() {
         ...currentGameState,
         landmarkInventory: [...currentGameState.landmarkInventory, selectedLandmark.id]
     };
-    alert(`🎉 NOVA CONSTRUÇÃO LENDÁRIA DESBLOQUEADA: ${selectedLandmark.name}!\n\nAcesse o menu de troféus na barra superior para posicioná-la no mapa.`);
+    showToast("Novo Monumento!", `Você desbloqueou: ${selectedLandmark.name}! Acesse o inventário.`, "success");
     return newGameState;
   };
 
@@ -682,9 +721,6 @@ export default function App() {
     newStats.budget += budgetGain;
     newStats.level = newStats.population >= 25000 ? 3 : newStats.population >= 10000 ? 2 : 1;
 
-    // REMOVIDO: Lógica de slots de veículos por população (5k).
-    // Agora os veículos são obtidos apenas pelo evento diário de sorte (1%).
-
     const checkBudgetMilestone = () => {
         const threshold = 5000;
         const currentMilestone = Math.floor(newStats.budget / threshold) * threshold;
@@ -693,7 +729,7 @@ export default function App() {
             newGameState.budgetMilestonesReached.push(currentMilestone);
             const randomSpecial = SPECIAL_BUILDINGS[Math.floor(Math.random() * SPECIAL_BUILDINGS.length)];
             newGameState.specialBuildingQueue.push(randomSpecial.id);
-            alert(`💰 Marco de Orçamento Atingido: $${currentMilestone}!\n\nUma nova franquia (${randomSpecial.name}) obteve licença para construir na sua cidade. Ela foi adicionada à fila de construção e aparecerá assim que houver um espaço adequado.`);
+            showToast("Franquia Chegou!", `${randomSpecial.name} obteve licença para construir na sua cidade.`, "success");
         }
     };
     checkBudgetMilestone();
@@ -933,8 +969,63 @@ export default function App() {
   };
 
   return (
-    <div className="flex flex-col md:flex-row h-screen w-full bg-gray-900">
+    <div className="flex flex-col md:flex-row h-screen w-full bg-gray-900 relative">
       
+      {/* --- NOTIFICATION TOAST --- */}
+      {notification && (
+          <div className="fixed top-4 right-4 z-[100] animate-in slide-in-from-right fade-in duration-300 pointer-events-none">
+              <div className={`
+                  flex items-start gap-3 p-4 rounded-xl shadow-2xl border backdrop-blur-md min-w-[300px] max-w-sm
+                  ${notification.type === 'success' ? 'bg-green-900/90 border-green-500 text-green-100' : 
+                    notification.type === 'error' ? 'bg-red-900/90 border-red-500 text-red-100' :
+                    notification.type === 'warning' ? 'bg-yellow-900/90 border-yellow-500 text-yellow-100' :
+                    'bg-gray-800/90 border-cyan-500 text-gray-100'}
+              `}>
+                  <div className="mt-0.5">
+                      {notification.type === 'success' && <CheckCircle className="w-5 h-5" />}
+                      {notification.type === 'error' && <AlertTriangle className="w-5 h-5" />}
+                      {notification.type === 'warning' && <AlertTriangle className="w-5 h-5" />}
+                      {notification.type === 'info' && <Info className="w-5 h-5" />}
+                  </div>
+                  <div className="flex-1">
+                      <h4 className="font-bold text-sm mb-1">{notification.title}</h4>
+                      <p className="text-xs opacity-90 leading-relaxed">{notification.message}</p>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* --- IMPORT CONFIRMATION MODAL --- */}
+      {isImportModalOpen && (
+          <div className="fixed inset-0 z-[110] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+              <div className="bg-gray-800 border border-gray-600 rounded-2xl shadow-2xl max-w-md w-full p-6 text-center">
+                  <div className="w-16 h-16 bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <AlertTriangle className="w-8 h-8 text-red-500" />
+                  </div>
+                  <h3 className="text-xl font-bold text-white mb-2">Sobrescrever Jogo?</h3>
+                  <p className="text-gray-400 text-sm mb-6">
+                      Ao importar este backup, <strong>todo o progresso atual será perdido</strong> irremediavelmente. 
+                      <br/><br/>
+                      Deseja continuar?
+                  </p>
+                  <div className="flex gap-3">
+                      <button 
+                        onClick={() => { setPendingImportFile(null); setIsImportModalOpen(false); }}
+                        className="flex-1 py-3 rounded-lg bg-gray-700 hover:bg-gray-600 text-white font-medium transition-colors"
+                      >
+                          Cancelar
+                      </button>
+                      <button 
+                        onClick={confirmImportSave}
+                        className="flex-1 py-3 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold flex items-center justify-center gap-2 transition-colors"
+                      >
+                          <Upload className="w-4 h-4" /> Importar
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
       <MediaPlayer />
 
       {/* CITY DISPLAY */}
@@ -954,7 +1045,7 @@ export default function App() {
           onUnlockVehicles={handleUnlockVehicles}
           unlockedVehicles={gameState.unlockedVehicles}
           onExportSave={handleExportSave}
-          onImportSave={handleImportSave}
+          onImportSave={handleImportSaveRequest}
         />
         <ClockWidget gameCreatedAt={gameState.createdAt} />
       </div>
