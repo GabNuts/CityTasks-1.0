@@ -337,37 +337,140 @@ export const renderIndHighTech = (lot: THREE.Group, variant: number, isRare: boo
 
 // 1. Coca-Cola Factory (2x2)
 export const renderIndCocaCola = (lot: THREE.Group, isNight: boolean) => {
-    const red = 0xf40009;
-    const white = 0xffffff;
-    const grey = 0xe0e0e0;
+    // Cores da Marca
+    const cokeRed = 0xf40009;
+    const cokeWhite = 0xffffff;
+    const metalColor = 0xb0bec5;
+    const darkMetal = 0x37474f;
+    const glassColor = 0x81d4fa;
 
-    lot.add(createBox(3.5, 1.2, 2.5, red, 0, 0.6, -0.5, isNight));
-    lot.add(createBox(3.6, 0.1, 2.6, white, 0, 1.1, -0.5, isNight));
-
-    const tankGeo = new THREE.CylinderGeometry(0.5, 0.5, 1.5, 16);
-    const tankMat = new THREE.MeshStandardMaterial({color: 0xcccccc, metalness: 0.5});
-    const t1 = new THREE.Mesh(tankGeo, tankMat); t1.position.set(1.5, 0.75, 1.2); lot.add(t1);
-    const t2 = new THREE.Mesh(tankGeo, tankMat); t2.position.set(0.4, 0.75, 1.2); lot.add(t2);
+    // 1. Galpão Principal (Fábrica)
+    // Corpo principal vermelho com faixa branca
+    lot.add(createBox(3.4, 1.5, 2.8, cokeRed, 0, 0.75, 0, isNight));
+    lot.add(createBox(3.5, 0.4, 2.9, cokeWhite, 0, 1.2, 0, isNight)); // Faixa superior
     
-    lot.add(createBox(1.2, 0.1, 0.1, 0x999999, 0.95, 1.3, 1.2, isNight)); 
-    lot.add(createBox(0.1, 0.5, 0.1, 0x999999, 0.4, 1.0, 0.8, isNight)); 
+    // Placa "Coca-Cola" na Faixa Branca
+    // Substitui os blocos antigos por uma textura real
+    addCustomLogoSign(lot, getCocaColaLogoTexture(), 0, 1.2, 1.46, 1.8, 0.6, 0, isNight);
 
-    lot.add(createBox(1.5, 0.6, 0.8, grey, -1.2, 0.3, 1.0, isNight));
-    lot.add(createBox(1.2, 0.4, 0.05, 0x333333, -1.2, 0.2, 1.41, isNight)); 
-
-    addCustomLogoSign(lot, getCocaColaLogoTexture(), 0, 1.5, 0.81, 1.5, 0.75, 0, isNight);
-
-    lot.add(createWindow(2.0, 0.5, 0, 0.5, 0.76, isNight));
-    if (isNight) {
-        const bottles = new THREE.Points(
-            new THREE.BufferGeometry().setFromPoints([
-                new THREE.Vector3(-0.8, 0.3, 0.7), new THREE.Vector3(-0.4, 0.3, 0.7),
-                new THREE.Vector3(0, 0.3, 0.7), new THREE.Vector3(0.4, 0.3, 0.7)
-            ]),
-            new THREE.PointsMaterial({color: 0x000000, size: 0.1})
-        );
-        lot.add(bottles);
+    // 2. Linha de Produção Envidraçada (Lateral)
+    const prodX = 0; const prodZ = 1.6;
+    lot.add(createBox(2.8, 0.8, 0.6, darkMetal, prodX, 0.4, prodZ, isNight)); // Base
+    const glass = createBox(2.6, 0.6, 0.1, glassColor, prodX, 0.5, prodZ + 0.3, isNight); // Vitrine
+    if(isNight) {
+        (glass.material as THREE.MeshStandardMaterial).emissive.setHex(0x00bcd4); 
+        (glass.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.4;
     }
+    lot.add(glass);
+    
+    // Esteira interna (Cilindros e garrafinhas)
+    for(let i=0; i<8; i++) {
+        const bottleX = -1.0 + (i * 0.3);
+        lot.add(createBox(0.08, 0.2, 0.08, 0x3e2723, bottleX, 0.5, prodZ + 0.1, isNight)); // Liquido
+        lot.add(createBox(0.09, 0.05, 0.09, cokeRed, bottleX, 0.55, prodZ + 0.1, isNight)); // Rótulo
+    }
+
+    // 3. Silos de Xarope / Açúcar
+    const siloX = -1.2; const siloZ = -0.8;
+    const siloGeo = new THREE.CylinderGeometry(0.4, 0.4, 2.0, 16);
+    const siloMat = new THREE.MeshStandardMaterial({color: metalColor, roughness: 0.3, metalness: 0.6});
+    const silo1 = new THREE.Mesh(siloGeo, siloMat);
+    silo1.position.set(siloX, 1.0, siloZ);
+    silo1.castShadow = true;
+    lot.add(silo1);
+    
+    const silo2 = silo1.clone();
+    silo2.position.set(siloX - 0.8, 1.0, siloZ);
+    lot.add(silo2);
+    
+    // Tubulações
+    lot.add(createBox(1.0, 0.1, 0.1, cokeRed, siloX - 0.4, 1.5, siloZ + 0.4, isNight));
+    lot.add(createBox(0.1, 0.1, 0.8, cokeRed, siloX, 1.5, 0, isNight));
+
+    // 4. Garrafa Gigante no Teto (Landmark)
+    const bottleGroup = new THREE.Group();
+    // CORREÇÃO: Baixado de 2.8 para 1.95 para encostar no teto
+    bottleGroup.position.set(1.0, 1.95, -0.5);
+    
+    const bBody = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.8, 12), new THREE.MeshStandardMaterial({color: 0x3e2723}));
+    const bLabel = new THREE.Mesh(new THREE.CylinderGeometry(0.31, 0.31, 0.4, 12), new THREE.MeshStandardMaterial({color: cokeRed}));
+    const bNeck = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.3, 0.4, 12), new THREE.MeshStandardMaterial({color: 0xffffff, transparent: true, opacity: 0.5}));
+    bNeck.position.y = 0.6;
+    const bCap = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.05, 12), new THREE.MeshStandardMaterial({color: cokeRed}));
+    bCap.position.y = 0.82;
+    
+    bottleGroup.add(bBody);
+    bottleGroup.add(bLabel);
+    bottleGroup.add(bNeck);
+    bottleGroup.add(bCap);
+    
+    const bStand = createBox(0.8, 0.1, 0.8, darkMetal, 0, -0.45, 0, isNight);
+    bottleGroup.add(bStand);
+    
+    bottleGroup.rotation.z = 0.1;
+    bottleGroup.rotation.x = 0.1;
+    lot.add(bottleGroup);
+
+    // 5. Docas e Caminhão Detalhado
+    const dockX = 1.0; const dockZ = 1.4;
+    lot.add(createBox(0.6, 0.8, 0.1, 0x333333, dockX, 0.4, 1.41, isNight));
+    lot.add(createBox(0.6, 0.8, 0.1, 0x333333, dockX + 0.8, 0.4, 1.41, isNight));
+    
+    // Caminhão Aprimorado
+    const truckGroup = new THREE.Group();
+    truckGroup.position.set(dockX, 0.25, 2.2);
+    
+    // Baú
+    truckGroup.add(createBox(0.7, 0.9, 1.4, cokeRed, 0, 0.45, 0, isNight));
+    
+    // Logo Coca-Cola nas laterais do caminhão
+    const truckLogoTex = getCocaColaLogoTexture();
+    addCustomLogoSign(truckGroup, truckLogoTex, 0.36, 0.5, 0, 1.0, 0.4, Math.PI/2, isNight); // Lado Dir
+    addCustomLogoSign(truckGroup, truckLogoTex, -0.36, 0.5, 0, 1.0, 0.4, -Math.PI/2, isNight); // Lado Esq (invertido)
+    
+    // Cabine
+    const cabZ = 0.95;
+    truckGroup.add(createBox(0.65, 0.6, 0.5, cokeRed, 0, 0.3, cabZ, isNight));
+    // Janelas da Cabine
+    truckGroup.add(createBox(0.66, 0.25, 0.05, glassColor, 0, 0.45, cabZ + 0.26, isNight)); // Para-brisa
+    truckGroup.add(createBox(0.05, 0.25, 0.3, glassColor, 0.31, 0.45, cabZ, isNight)); // Janela Dir
+    truckGroup.add(createBox(0.05, 0.25, 0.3, glassColor, -0.31, 0.45, cabZ, isNight)); // Janela Esq
+    
+    // Para-choque e Luzes
+    truckGroup.add(createBox(0.7, 0.1, 0.1, 0xeeeeee, 0, 0.1, cabZ + 0.25, isNight));
+    const hLight = createBox(0.1, 0.05, 0.02, 0xffeb3b, 0.2, 0.15, cabZ + 0.26, isNight);
+    const hLight2 = createBox(0.1, 0.05, 0.02, 0xffeb3b, -0.2, 0.15, cabZ + 0.26, isNight);
+    if(isNight) {
+        (hLight.material as THREE.MeshStandardMaterial).emissive.setHex(0xffeb3b);
+        (hLight2.material as THREE.MeshStandardMaterial).emissive.setHex(0xffeb3b);
+    }
+    truckGroup.add(hLight); truckGroup.add(hLight2);
+
+    // Rodas Cilíndricas
+    const wheelGeo = new THREE.CylinderGeometry(0.15, 0.15, 0.1, 8);
+    const wheelMat = new THREE.MeshStandardMaterial({color: 0x111111});
+    const addWheel = (x: number, z: number) => {
+        const w = new THREE.Mesh(wheelGeo, wheelMat);
+        w.rotation.z = Math.PI/2;
+        w.position.set(x, 0, z);
+        truckGroup.add(w);
+    };
+    addWheel(0.35, 0.4); addWheel(-0.35, 0.4); // Traseira
+    addWheel(0.35, 0.9); addWheel(-0.35, 0.9); // Frente
+    
+    lot.add(truckGroup);
+
+    // Caixas de engradados
+    lot.add(createBox(0.3, 0.3, 0.3, cokeRed, 1.5, 0.15, 1.8, isNight));
+    lot.add(createBox(0.3, 0.3, 0.3, cokeRed, 1.5, 0.45, 1.8, isNight));
+    lot.add(createBox(0.3, 0.3, 0.3, cokeRed, 1.8, 0.15, 1.7, isNight));
+
+    // Chaminé
+    const stack = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.3, 1.5, 8), new THREE.MeshStandardMaterial({color: 0x5d4037}));
+    stack.position.set(-1.0, 2.0, -1.0);
+    lot.add(stack);
+    
+    addACUnit(lot, 1.5, isNight);
 };
 
 // 2. Nike Factory (2x2)

@@ -25,8 +25,6 @@ interface CityDisplayProps {
   onNewGame?: () => void;
 }
 
-// ... (Rest of imports and interfaces unchanged)
-
 // Mapeamento simples de respostas da API para tipos internos
 type WeatherCondition = 'Clear' | 'Clouds' | 'Rain' | 'Drizzle' | 'Thunderstorm' | 'Snow' | 'Atmosphere';
 
@@ -49,7 +47,6 @@ interface WorldCityData {
   error: boolean;
 }
 
-// ... (API constants and translation functions unchanged)
 const SUGGESTED_CITIES = [
   "Dublin, IE", 
   "Orlando, US", 
@@ -62,6 +59,22 @@ const SUGGESTED_CITIES = [
   "Rome, IT",
   "Sydney, AU"
 ];
+
+// Tradução de nomes de veículos para o Tooltip
+const getVehicleName = (id: string) => {
+    const map: Record<string, string> = {
+        'delorean': 'DeLorean (De Volta para o Futuro)',
+        'mystery_machine': 'Máquina de Mistério (Scooby-Doo)',
+        'mcqueen': 'Relâmpago McQueen (Carros)',
+        'bumblebee': 'Bumblebee (Transformers)',
+        'optimus': 'Optimus Prime (Transformers)',
+        'ghost_rider': 'Motoqueiro Fantasma',
+        'ae86': 'Toyota AE86 (Initial D)',
+        'skyline': 'Nissan Skyline GTR (Velozes)',
+        'penelope': 'Penélope Charmosa (Corrida Maluca)'
+    };
+    return map[id] || id;
+};
 
 // Tradução de categorias principais (Main)
 const translateMainCondition = (condition: string): string => {
@@ -371,7 +384,7 @@ export default function CityDisplay({
         if(openWeatherKey) fetchMainWeather();
     }, 600000); 
     return () => clearInterval(interval);
-  }, [openWeatherKey]); // Dependência atualizada
+  }, [openWeatherKey]); 
 
   const handleAddWorldCity = (nameOverride?: string) => {
       const cityToAdd = nameOverride || newCityInput;
@@ -445,8 +458,6 @@ export default function CityDisplay({
 
   return (
     <div className="flex flex-col h-full bg-gray-900 p-6 relative overflow-hidden">
-      
-      {/* ... (Existing Weather Widget Code) ... */}
       
       {/* WEATHER WIDGET (Top Left) */}
       <div className="absolute top-6 left-6 z-20 pointer-events-auto group">
@@ -550,7 +561,7 @@ export default function CityDisplay({
           </div>
       )}
 
-      {/* ... (Weather Modal Code) ... */}
+      {/* WEATHER MODAL */}
       {isWeatherModalOpen && (
           <div className="absolute inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
               <div className="bg-gray-800/90 border border-gray-600 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
@@ -680,7 +691,7 @@ export default function CityDisplay({
           </div>
       )}
 
-      {/* ... (Top Stats Bar - Unchanged) ... */}
+      {/* TOP STATS BAR */}
       <div className="flex flex-wrap items-center justify-end gap-6 bg-gray-800/90 backdrop-blur rounded-2xl p-4 mb-6 border border-gray-700 shadow-lg z-10 absolute top-6 right-6 pointer-events-none ml-48">
         
         {/* Population & Budget */}
@@ -721,6 +732,66 @@ export default function CityDisplay({
           </div>
         </div>
 
+        {/* --- VISUALIZADOR DE CONTAGEM DE PRÉDIOS (NOVO) --- */}
+        <div className="flex items-center gap-4 px-4 py-1 border-l border-r border-gray-700 mx-2 pointer-events-auto bg-gray-800/50 rounded-lg">
+            {/* Residencial */}
+            <div className="flex items-center gap-1 text-green-300" title="Residencial">
+                <Home size={16} />
+                <span className="text-sm font-mono font-bold">{stats.residentialCount}</span>
+            </div>
+            {/* Comercial */}
+            <div className="flex items-center gap-1 text-blue-300" title="Comercial">
+                <Building2 size={16} />
+                <span className="text-sm font-mono font-bold">{stats.commercialCount}</span>
+            </div>
+            {/* Industrial */}
+            <div className="flex items-center gap-1 text-amber-500" title="Industrial">
+                <Factory size={16} />
+                <span className="text-sm font-mono font-bold">{stats.industrialCount}</span>
+            </div>
+            {/* Parques */}
+            <div className="flex items-center gap-1 text-emerald-400" title="Parques">
+                <TreeDeciduous size={16} />
+                <span className="text-sm font-mono font-bold">{stats.parksCount}</span>
+            </div>
+            {/* Governo */}
+            <div className="flex items-center gap-1 text-gray-400" title="Governo">
+                <Landmark size={16} />
+                <span className="text-sm font-mono font-bold">{stats.govCount}</span>
+            </div>
+            {/* Monumentos */}
+            <div className="flex items-center gap-1 text-purple-400" title="Monumentos">
+                <Trophy size={16} />
+                <span className="text-sm font-mono font-bold">{landmarkCount}</span>
+            </div>
+        </div>
+
+        {/* --- CONTADOR DE VEÍCULOS RAROS (NOVO) --- */}
+        <div className="relative group flex items-center gap-2 px-2 cursor-help text-purple-300 pointer-events-auto mr-2">
+             <Car size={20} className="drop-shadow-[0_0_5px_rgba(168,85,247,0.5)]"/>
+             <span className="text-lg font-bold font-mono">{unlockedVehicles?.length || 0}</span>
+             
+             {/* Tooltip de Veículos */}
+             <div className="absolute top-full right-0 mt-3 w-64 bg-gray-900 border border-gray-600 rounded-lg p-3 shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
+                <h4 className="text-xs font-bold text-purple-400 uppercase mb-2 border-b border-gray-700 pb-1 flex items-center gap-2">
+                    <Car size={12}/> Garagem Rara
+                </h4>
+                {(!unlockedVehicles || unlockedVehicles.length === 0) ? (
+                    <span className="text-xs text-gray-500 italic">Nenhum veículo lendário encontrado na cidade.</span>
+                ) : (
+                    <ul className="text-xs text-gray-300 space-y-1">
+                        {unlockedVehicles.map(v => (
+                            <li key={v} className="flex items-center gap-2">
+                                <span className="w-1.5 h-1.5 rounded-full bg-purple-500 shadow-[0_0_5px_#a855f7]"></span>
+                                {getVehicleName(v)}
+                            </li>
+                        ))}
+                    </ul>
+                )}
+             </div>
+        </div>
+
+        {/* Botões de Ação */}
         <div className="flex items-center gap-4 pointer-events-auto pl-4 border-l border-gray-700">
            <div className="px-4 py-1 bg-gray-700 rounded-full border border-gray-600">
               <span className="text-sm text-gray-300 font-semibold">Nível: {stats.level}</span>

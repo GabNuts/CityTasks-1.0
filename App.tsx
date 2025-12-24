@@ -20,7 +20,8 @@ const INITIAL_STATS: CityStats = {
   industrialCount: 0,
   parksCount: 0,
   govCount: 0,
-  lastLoginDate: getGameDateString(), // Use game time (7am rollover)
+  // Usa o dia ajustado para inicialização
+  lastLoginDate: getGameDateString(), 
   dailyCost: 150 // Updated Base cost
 };
 
@@ -74,6 +75,11 @@ const SPECIAL_BUILDINGS = [
 
 const RARE_CARS_LIST = [
     { id: 'delorean', name: 'DeLorean (Back to the Future)' },
+    { id: 'ecto1', name: 'Ecto-1 (Caça-Fantasmas)' },
+    { id: 'jp_jeep', name: 'Jipe do Parque dos Dinossauros' },
+    { id: 'tron_bike', name: 'Moto de Luz (Tron)' },
+    { id: 'batmobile', name: 'Batmóvel' }
+    { id: 'ecto1', name: 'Ecto1 (Caça Fantasmas)' },
     { id: 'ghost_rider', name: 'Moto do Motoqueiro Fantasma' },
     { id: 'mystery_machine', name: 'Van do Scooby Doo' },
     { id: 'mcqueen', name: 'Relâmpago McQueen' },
@@ -215,7 +221,7 @@ export default function App() {
   useEffect(() => {
     // LOAD GAME
     const savedData = localStorage.getItem('citytask_save_v1');
-    const today = getGameDateString(); // Usar data lógica do jogo (7am rollover)
+    const todayGameDate = getGameDateString(); // <--- Changed: Uses Virtual Day (Start 7 AM)
 
     if (savedData) {
       try {
@@ -223,16 +229,16 @@ export default function App() {
         if (parsed.tasks) setTasks(parsed.tasks);
         
         let loadedStats = parsed.stats || INITIAL_STATS;
-        if (!loadedStats.lastLoginDate) loadedStats.lastLoginDate = today; 
+        if (!loadedStats.lastLoginDate) loadedStats.lastLoginDate = todayGameDate; 
         if (loadedStats.dailyCost === undefined) loadedStats.dailyCost = 150;
 
         let loadedGameState = parsed.gameState || INITIAL_GAME_STATE;
         if (!loadedGameState.unlockedVehicles) loadedGameState.unlockedVehicles = [];
 
         // --- MAINTENANCE & DAILY EVENTS ---
-        if (loadedStats.lastLoginDate !== today) {
+        if (loadedStats.lastLoginDate !== todayGameDate) {
             const lastLogin = new Date(loadedStats.lastLoginDate);
-            const now = new Date(today);
+            const now = new Date(todayGameDate);
             const diffTime = Math.abs(now.getTime() - lastLogin.getTime());
             const daysMissed = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
             
@@ -242,7 +248,7 @@ export default function App() {
             const totalDeduction = dailyCost * daysMissed;
             loadedStats.budget -= totalDeduction;
             loadedStats.dailyCost = dailyCost;
-            loadedStats.lastLoginDate = today;
+            loadedStats.lastLoginDate = todayGameDate;
 
             if (daysMissed >= 4 && loadedStats.budget < 0) {
                 const popLoss = Math.floor(loadedStats.population * 0.10); 
@@ -258,7 +264,7 @@ export default function App() {
             
             if (availableCars.length > 0) {
                 // Chance: 1%
-                if (Math.random() < 0.01) {
+                if (Math.random() < 0.03) {
                     const wonCar = availableCars[Math.floor(Math.random() * availableCars.length)];
                     loadedGameState.unlockedVehicles.push(wonCar.id);
                     alert(`🚗 EVENTO RARO! Um veículo lendário apareceu na cidade: ${wonCar.name}!`);
@@ -310,7 +316,7 @@ export default function App() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `citytask_backup_${new Date().toISOString().split('T')[0]}.json`;
+      link.download = `citytask_backup_${getGameDateString()}.json`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -318,44 +324,25 @@ export default function App() {
 
   const handleImportSave = (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
-      if (!file) {
-          e.target.value = ''; // Reset input to allow re-selecting same file
-          return;
-      }
+      if (!file) return;
       
-      if (!confirm("Isso irá sobrescrever seu progresso atual. Deseja continuar?")) {
-          e.target.value = ''; // Reset input
-          return;
-      }
+      if (!confirm("Isso irá sobrescrever seu progresso atual. Deseja continuar?")) return;
 
       const reader = new FileReader();
       reader.onload = (ev) => {
         try {
           const json = ev.target?.result as string;
+          // Basic validation
           const parsed = JSON.parse(json);
-          // Stronger validation
-          if (parsed && typeof parsed === 'object' && 'stats' in parsed && 'buildings' in parsed) {
-              // 1. Save to LocalStorage immediately
+          if (parsed && parsed.stats && parsed.buildings) {
               localStorage.setItem('citytask_save_v1', json);
-              
-              // 2. Direct State Update (Fix for environment where reload is blocked)
-              if (parsed.tasks) setTasks(parsed.tasks);
-              if (parsed.stats) setStats(parsed.stats);
-              if (parsed.gameState) setGameState(parsed.gameState);
-              if (parsed.buildings) {
-                  setBuildings(parsed.buildings);
-                  // Trigger rebuild map logic explicitly
-                  rebuildOccupancyMap(parsed.buildings);
-              }
-
-              alert("Backup restaurado com sucesso!");
+              alert("Backup restaurado com sucesso! A página será recarregada.");
+              window.location.reload();
           } else {
-              throw new Error("Estrutura do arquivo inválida. Certifique-se de que é um arquivo .json gerado por este jogo.");
+              throw new Error("Invalid structure");
           }
-        } catch (err: any) {
-          alert("Erro ao importar: " + (err.message || "Arquivo corrompido"));
-        } finally {
-            e.target.value = ''; // Always reset input
+        } catch (err) {
+          alert("Erro: Arquivo de save inválido ou corrompido.");
         }
       };
       reader.readAsText(file);
@@ -624,15 +611,6 @@ export default function App() {
     setTasks([...tasks, newTask]);
   };
 
-  const updateTask = (id: string, updates: Partial<Task>) => {
-    setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
-  };
-
-  // Reorder tasks manually
-  const reorderTasks = (newOrder: Task[]) => {
-    setTasks(newOrder);
-  };
-
   const unlockLandmark = (currentGameState: GameState) => {
     const allUnlocked = [...currentGameState.unlockedLandmarks, ...currentGameState.landmarkInventory];
     const available = LANDMARK_CATALOG.filter(l => !allUnlocked.includes(l.id));
@@ -734,13 +712,15 @@ export default function App() {
     if (newStats.population >= 20000) checkAndAwardMilestone('pop_20000');
     if (newStats.population >= 30000) checkAndAwardMilestone('pop_30000');
 
-    const today = getGameDateString(); // Use game time (7am rollover)
-    const tasksForToday = updatedTasks.filter(t => t.dueDate === today);
+    // --- PERFECT DAY LOGIC (Using Virtual Game Day) ---
+    // If you complete tasks at 2 AM, they count for "Yesterday"
+    const todayGameDate = getGameDateString(); // "YYYY-MM-DD" adjusted -7h
+    const tasksForToday = updatedTasks.filter(t => t.dueDate === todayGameDate);
     const totalToday = tasksForToday.length;
     const completedToday = tasksForToday.filter(t => t.completed).length;
 
     if (totalToday > 0 && completedToday === totalToday) {
-        if (newGameState.lastPerfectDay !== today) {
+        if (newGameState.lastPerfectDay !== todayGameDate) {
             const govData = generateBuildingData('gov', newStats.population);
             const spot = findGridSpot(govData.w, govData.d, 'gov', newBuildings);
             if(spot) {
@@ -754,9 +734,9 @@ export default function App() {
             }
             newStats.budget += 1000;
             newGameState.totalPerfectDays += 1;
-            // Calcular dia anterior baseado no horário do jogo
-            const yesterdayDate = new Date();
-            yesterdayDate.setHours(yesterdayDate.getHours() - 7);
+            
+            // Check streak using Date objects based on Game Day Strings
+            const yesterdayDate = new Date(todayGameDate);
             yesterdayDate.setDate(yesterdayDate.getDate() - 1);
             const yesterdayStr = yesterdayDate.toISOString().split('T')[0];
 
@@ -765,7 +745,7 @@ export default function App() {
             } else {
                 newGameState.perfectDayStreak = 1;
             }
-            newGameState.lastPerfectDay = today;
+            newGameState.lastPerfectDay = todayGameDate;
             if (newGameState.perfectDayStreak >= 5) checkAndAwardMilestone('streak_5');
             if (newGameState.perfectDayStreak >= 10) checkAndAwardMilestone('streak_10');
             if (newGameState.totalPerfectDays >= 15) checkAndAwardMilestone('total_15');
@@ -956,6 +936,8 @@ export default function App() {
   return (
     <div className="flex flex-col md:flex-row h-screen w-full bg-gray-900">
       
+      <MediaPlayer />
+
       {/* CITY DISPLAY */}
       <div className="w-full md:w-[72%] lg:w-[82%] h-1/2 md:h-full relative order-2 md:order-1">
         <CityDisplay 
@@ -976,7 +958,6 @@ export default function App() {
           onImportSave={handleImportSave}
         />
         <ClockWidget gameCreatedAt={gameState.createdAt} />
-        <MediaPlayer />
       </div>
 
       {/* TASK LIST */}
@@ -984,11 +965,9 @@ export default function App() {
         <TaskList 
           tasks={tasks} 
           onAddTask={addTask} 
-          onEditTask={updateTask}
           onCompleteTask={completeTask} 
           onDeleteTask={deleteTask}
           onToggleSubtask={toggleSubtask}
-          onReorderTasks={reorderTasks}
         />
       </div>
 

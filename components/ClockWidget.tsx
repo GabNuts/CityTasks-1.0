@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Moon, Sun, Cloud, Leaf, Snowflake, Flower, Clock, Calendar, Timer, Hourglass, Globe, X, Settings, Play, Square, RotateCcw, Plus, Trash2, Volume2, Upload, AlertCircle, Repeat, Bell, MapPin, ChevronLeft, ChevronRight } from 'lucide-react';
-import { getMoonPhase, getSeasonSouthernHemisphere, getGameDay, formatTime, formatDateFull, getWorldTime, getAstronomicalEvents, getMonthlyMoonPhases } from '../utils/timeHelpers';
+import { getMoonPhase, getSeasonSouthernHemisphere, getGameDay, formatTime, formatDateFull, getWorldTime, getAstronomicalEvents, getMonthlyMoonPhases, getAdjustedDate } from '../utils/timeHelpers';
 import { saveAudioBlob, getAudioBlob, deleteAudioBlob } from '../utils/db';
 import { v4 as uuidv4 } from 'uuid';
 import RichTextEditor from './RichTextEditor';
@@ -24,8 +24,9 @@ interface Alarm {
   label: string;
   isActive: boolean;
   hasCustomAudio: boolean;
+  // Novos campos para despertar gradual
   gradualWakeup: boolean;
-  gradualDuration: number;
+  gradualDuration: number; // 5 a 30 segundos
   descriptionHtml: string;
 }
 
@@ -52,22 +53,36 @@ const ClockWidget: React.FC<ClockWidgetProps> = ({ gameCreatedAt }) => {
   const [alarms, setAlarms] = useState<Alarm[]>(() => {
     try {
       const saved = localStorage.getItem('citytask_alarms_v2'); 
+      let loadedAlarms: any[] = [];
+
       if (!saved) {
           const old = localStorage.getItem('citytask_alarms');
           if (old) {
-              const oldAlarms = JSON.parse(old);
-              return oldAlarms.map((a: any) => ({
+              const parsedOld = JSON.parse(old);
+              loadedAlarms = parsedOld.map((a: any) => ({
                   ...a,
                   type: 'fixed',
                   intervalMinutes: 120,
                   windowStart: '08:00',
                   windowEnd: '20:00',
-                  lastTriggered: Date.now()
+                  lastTriggered: Date.now(),
+                  gradualWakeup: false,
+                  gradualDuration: 30,
+                  descriptionHtml: a.descriptionHtml || DEFAULT_DESC
               }));
           }
-          return [];
+      } else {
+          loadedAlarms = JSON.parse(saved);
       }
-      return JSON.parse(saved);
+
+      // Sanitização CRÍTICA: Garante que todo alarme tenha um ID válido (string) ao carregar
+      return loadedAlarms.map(a => ({
+          ...a,
+          id: String(a.id || uuidv4()), // Força string e gera se faltar
+          gradualWakeup: a.gradualWakeup ?? false,
+          gradualDuration: a.gradualDuration ?? 30
+      }));
+
     } catch (e) {
       console.error("Erro ao carregar alarmes:", e);
       return [];
@@ -201,6 +216,7 @@ const ClockWidget: React.FC<ClockWidgetProps> = ({ gameCreatedAt }) => {
           audioRef.current.src = "";
       }
 
+      // SOM PADRÃO SE NÃO TIVER CUSTOMIZADO
       let audioSrc = "https://actions.google.com/sounds/v1/alarms/digital_watch.ogg"; 
       
       if (alarm.hasCustomAudio) {
@@ -210,7 +226,7 @@ const ClockWidget: React.FC<ClockWidgetProps> = ({ gameCreatedAt }) => {
                   audioSrc = URL.createObjectURL(blob);
               }
           } catch (e) {
-              console.error("Error loading custom audio", e);
+              console.error("Error loading custom audio, using default", e);
           }
       }
 
@@ -225,8 +241,10 @@ const ClockWidget: React.FC<ClockWidgetProps> = ({ gameCreatedAt }) => {
           const durationSeconds = Math.max(5, Math.min(30, alarm.gradualDuration));
           let currentSecond = 0;
           
+          // Limpa intervalo anterior se houver
           if (gradualIntervalRef.current) clearInterval(gradualIntervalRef.current);
           
+          // Sobe o volume a cada 1 segundo (sobe de "1 em 1" na escala proporcional)
           gradualIntervalRef.current = window.setInterval(() => {
               currentSecond++;
               const newVol = Math.min(1, currentSecond / durationSeconds);
@@ -254,19 +272,37 @@ const ClockWidget: React.FC<ClockWidgetProps> = ({ gameCreatedAt }) => {
   };
 
   const handleSaveAlarm = async () => {
-      if (!alarmForm.id) {
-         const newAlarm = { ...alarmForm, id: uuidv4(), lastTriggered: Date.now() };
-         setAlarms(prev => [...prev, newAlarm]);
-      } else {
+      // Verifica se o ID já existe na lista atual de alarmes
+      const exists = alarms.some(a => a.id === alarmForm.id);
+
+      if (exists) {
+         // Se existe, atualiza
          setAlarms(prev => prev.map(a => a.id === alarmForm.id ? alarmForm : a));
+      } else {
+         // Se não existe (mesmo que tenha ID gerado pelo upload de áudio), cria novo
+         const finalId = alarmForm.id || uuidv4();
+         const newAlarm = { ...alarmForm, id: finalId, lastTriggered: Date.now() };
+         setAlarms(prev => [...prev, newAlarm]);
       }
       setIsEditingAlarm(null);
   };
 
-  const handleDeleteAlarm = async (id: string) => {
-      if (confirm('Deletar este alarme?')) {
-          await deleteAudioBlob(id);
-          setAlarms(prev => prev.filter(a => a.id !== id));
+  const handleDeleteAlarm = (e: React.MouseEvent, id: string) => {
+      e.stopPropagation(); // IMPORTANTE: Impede que o clique propague para outros elementos
+      
+      // Se o alarme a ser deletado estiver tocando, para ele
+      if (activeAlarmId === id) {
+          stopAlarm();
+      }
+
+      if (window.confirm('Deletar este alarme permanentemente?')) {
+          // Usa String() em ambos os lados para garantir comparação correta (v1 vs v2 IDs)
+          setAlarms(prev => prev.filter(a => String(a.id) !== String(id)));
+          
+          // Tenta limpar o áudio em background sem bloquear
+          deleteAudioBlob(id).catch(err => {
+              console.warn("Falha ao limpar áudio do alarme deletado (pode ser ignorado):", err);
+          });
       }
   };
 
@@ -274,8 +310,12 @@ const ClockWidget: React.FC<ClockWidgetProps> = ({ gameCreatedAt }) => {
       const file = e.target.files?.[0];
       if (file) {
           const tempId = alarmForm.id || uuidv4();
-          await saveAudioBlob(tempId, file);
-          setAlarmForm({ ...alarmForm, id: tempId, hasCustomAudio: true });
+          try {
+            await saveAudioBlob(tempId, file);
+            setAlarmForm({ ...alarmForm, id: tempId, hasCustomAudio: true });
+          } catch(e) {
+            alert("Erro ao salvar áudio. Tente um arquivo menor.");
+          }
       }
   };
 
@@ -357,27 +397,26 @@ const ClockWidget: React.FC<ClockWidgetProps> = ({ gameCreatedAt }) => {
   const astroEvents = getAstronomicalEvents(calendarViewDate.getFullYear());
   const moonCalendar = getMonthlyMoonPhases(calendarViewDate.getFullYear(), calendarViewDate.getMonth());
 
+  // Use Real Date for display
+  const displayDate = now;
+
   return (
     <>
       {/* MINIMIZED WIDGET */}
       <div 
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 left-6 bg-gray-900/80 backdrop-blur-md border border-gray-700 rounded-2xl p-4 shadow-2xl cursor-pointer hover:bg-gray-800 transition-all group z-30 min-w-[260px]"
+        className="fixed bottom-6 left-6 bg-gray-900/80 backdrop-blur-md border border-gray-700 rounded-2xl p-4 shadow-2xl cursor-pointer hover:bg-gray-800 transition-all group z-30 min-w-[240px]"
       >
-        <div className="flex flex-col items-center mb-2">
-           <span className="text-8xl font-bold text-white tracking-tighter font-mono drop-shadow-[0_0_15px_rgba(255,255,255,0.4)] leading-none">
-             {formatTime(now)}
-           </span>
-           <div className="flex items-center gap-2 mt-2">
-             <span className="text-xs text-gray-400 uppercase tracking-widest font-semibold">Dia de Jogo</span>
+        <div className="flex flex-col items-center justify-center mb-2">
+           <span className="text-8xl font-bold text-white tracking-tighter font-mono drop-shadow-[0_0_15px_rgba(255,255,255,0.4)] mb-2">{formatTime(now)}</span>
+           <div className="flex items-center gap-2 text-sm text-gray-400">
+             <span>Dia do Jogo</span>
              <span className="text-cyan-400 font-bold text-xl leading-none">#{getGameDay(gameCreatedAt)}</span>
            </div>
         </div>
-        
-        <div className="text-lg font-medium text-green-400 border-t border-gray-700 pt-3 mb-3 text-center">
-          {formatDateFull(now)}
+        <div className="text-lg font-bold text-green-400 border-t border-gray-700 pt-2 mb-3 text-center">
+            {formatDateFull(displayDate)}
         </div>
-
         <div className="flex justify-between items-center text-xs text-gray-400">
            <div className="flex items-center gap-1 bg-black/20 px-2 py-1 rounded-lg" title={moonPhase.name}>
               <span className="text-lg leading-none">{moonPhase.emoji}</span>
@@ -576,7 +615,7 @@ const ClockWidget: React.FC<ClockWidgetProps> = ({ gameCreatedAt }) => {
                                                     type="range" min="5" max="30" 
                                                     value={alarmForm.gradualDuration} 
                                                     onChange={e => setAlarmForm({...alarmForm, gradualDuration: parseInt(e.target.value)})} 
-                                                    className="flex-1" 
+                                                    className="flex-1 cursor-pointer"
                                                  />
                                                  <span className="text-xs text-white whitespace-nowrap">{alarmForm.gradualDuration} seg</span>
                                              </div>
@@ -637,10 +676,22 @@ const ClockWidget: React.FC<ClockWidgetProps> = ({ gameCreatedAt }) => {
                                          >
                                              <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${alarm.isActive ? 'left-5' : 'left-1'}`} />
                                          </button>
-                                         <button onClick={() => { setAlarmForm(alarm); setIsEditingAlarm(alarm.id); }} className="p-2 hover:bg-gray-800 rounded text-blue-400"><Settings size={16}/></button>
                                          <button 
-                                            onClick={() => handleDeleteAlarm(alarm.id)} 
+                                            onClick={() => { 
+                                                // Ensure default values are populated if missing
+                                                setAlarmForm({ 
+                                                    ...alarm, 
+                                                    gradualWakeup: alarm.gradualWakeup ?? false, 
+                                                    gradualDuration: alarm.gradualDuration ?? 30 
+                                                }); 
+                                                setIsEditingAlarm(alarm.id); 
+                                            }} 
+                                            className="p-2 hover:bg-gray-800 rounded text-blue-400"
+                                         ><Settings size={16}/></button>
+                                         <button 
+                                            onClick={(e) => handleDeleteAlarm(e, alarm.id)} 
                                             className="p-2 hover:bg-gray-800 rounded text-red-400"
+                                            title="Deletar Alarme"
                                          ><Trash2 size={16}/></button>
                                      </div>
                                  </div>
@@ -733,14 +784,14 @@ const ClockWidget: React.FC<ClockWidgetProps> = ({ gameCreatedAt }) => {
                                    <div key={day.day} className={`aspect-square rounded-lg border flex flex-col items-center justify-center p-1 relative ${day.isToday ? 'bg-cyan-900/40 border-cyan-500' : 'bg-gray-900 border-gray-700'} hover:border-gray-500 transition-colors cursor-default group`}>
                                        <span className={`absolute top-1 left-2 text-[10px] font-bold ${day.isToday ? 'text-cyan-400' : 'text-gray-500'}`}>{day.day}</span>
                                        
-                                       <div className="text-2xl" title={day.phase.name}>
+                                       <div className="text-4xl" title={day.phase.name}>
                                             {day.phase.emoji}
                                        </div>
                                        
                                        {/* Events in Bottom Right */}
                                        <div className="absolute bottom-1 right-1 flex gap-0.5 justify-end">
-                                           {day.holidayEmoji && <span className="text-lg leading-none hover:scale-125 transition-transform" title="Feriado">{day.holidayEmoji}</span>}
-                                           {day.astroEmoji && <span className="text-lg leading-none hover:scale-125 transition-transform" title={day.astroName || ''}>{day.astroEmoji}</span>}
+                                           {day.holidayEmoji && <span className="text-2xl leading-none hover:scale-125 transition-transform" title="Feriado">{day.holidayEmoji}</span>}
+                                           {day.astroEmoji && <span className="text-2xl leading-none hover:scale-125 transition-transform" title={day.astroName || ''}>{day.astroEmoji}</span>}
                                        </div>
                                    </div>
                                ))}

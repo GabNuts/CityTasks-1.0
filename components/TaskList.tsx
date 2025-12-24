@@ -1,38 +1,32 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { Task, TaskDifficulty, FrequencyType, SubTask } from '../types';
-import { Plus, Check, Trash2, Zap, AlertTriangle, Calendar, Repeat, ChevronDown, ChevronUp, Tag, Filter, X, Pencil, GripVertical } from 'lucide-react';
+import { Plus, Check, Trash2, Zap, AlertTriangle, Calendar, Repeat, ChevronDown, ChevronUp, Tag, Filter, X } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { getGameDateString } from '../utils/timeHelpers';
 
 interface TaskListProps {
   tasks: Task[];
   onAddTask: (task: Omit<Task, 'id' | 'createdAt' | 'completed'>) => void;
-  onEditTask: (id: string, updates: Partial<Task>) => void;
   onCompleteTask: (id: string) => void;
   onDeleteTask: (id: string) => void;
   onToggleSubtask: (taskId: string, subtaskId: string) => void;
-  onReorderTasks?: (tasks: Task[]) => void;
 }
 
-const TaskList: React.FC<TaskListProps> = ({ tasks, onAddTask, onEditTask, onCompleteTask, onDeleteTask, onToggleSubtask, onReorderTasks }) => {
+const TaskList: React.FC<TaskListProps> = ({ tasks, onAddTask, onCompleteTask, onDeleteTask, onToggleSubtask }) => {
   // --- States ---
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [filterType, setFilterType] = useState<'all' | 'today' | 'tomorrow' | 'urgent' | 'tag'>('today');
   const [selectedTag, setSelectedTag] = useState<string>('');
   const [openDetailId, setOpenDetailId] = useState<string | null>(null);
 
-  // Drag & Drop State
-  const dragItem = useRef<number | null>(null);
-  const dragOverItem = useRef<number | null>(null);
-
   // --- Form State ---
+  // Use Game Date String to determine "Today" in form defaults
   const initialFormState = {
     title: '',
     description: '',
     difficulty: TaskDifficulty.EASY,
-    dueDate: '', // Starts empty (optional)
+    dueDate: getGameDateString(), 
     isUrgent: false,
     isRepeatable: false,
     tags: [] as string[],
@@ -48,30 +42,7 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onAddTask, onEditTask, onCom
   const [newSubtaskInput, setNewSubtaskInput] = useState('');
 
   // --- Helpers ---
-  const resetForm = () => {
-      setFormData({ ...initialFormState, dueDate: '' }); // Reset to empty
-      setEditingTaskId(null);
-  };
-
-  const handleEdit = (task: Task) => {
-      setEditingTaskId(task.id);
-      setFormData({
-          title: task.title,
-          description: task.description || '',
-          difficulty: task.difficulty,
-          dueDate: task.dueDate || '',
-          isUrgent: task.isUrgent,
-          isRepeatable: task.isRepeatable,
-          tags: task.tags,
-          subtasks: task.subtasks,
-          frequency: task.recurrence?.type || 'once',
-          freqWeekDays: task.recurrence?.weekDays || [],
-          freqMonthDay: task.recurrence?.monthDay || 1,
-          freqCustomValue: task.recurrence?.customValue || 1,
-          freqCustomUnit: task.recurrence?.customUnit || 'day'
-      });
-      setIsModalOpen(true);
-  };
+  const resetForm = () => setFormData({ ...initialFormState, dueDate: getGameDateString() });
 
   const handleAddSubtask = () => {
     if (!newSubtaskInput.trim()) return;
@@ -92,12 +63,6 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onAddTask, onEditTask, onCom
     }
   };
 
-  const addTag = (tag: string) => {
-      if (!formData.tags.includes(tag)) {
-          setFormData(prev => ({ ...prev, tags: [...prev.tags, tag] }));
-      }
-  };
-
   const removeTag = (tag: string) => {
     setFormData(prev => ({ ...prev, tags: prev.tags.filter(t => t !== tag) }));
   };
@@ -106,11 +71,11 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onAddTask, onEditTask, onCom
     e.preventDefault();
     if (!formData.title.trim()) return;
 
-    const taskData = {
+    onAddTask({
       title: formData.title,
       description: formData.description,
       difficulty: formData.difficulty,
-      dueDate: formData.dueDate ? formData.dueDate : undefined, // Send undefined if empty string
+      dueDate: formData.dueDate,
       isUrgent: formData.isUrgent,
       isRepeatable: formData.isRepeatable,
       tags: formData.tags,
@@ -122,14 +87,7 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onAddTask, onEditTask, onCom
         customValue: formData.frequency === 'custom' ? formData.freqCustomValue : undefined,
         customUnit: formData.frequency === 'custom' ? formData.freqCustomUnit : undefined,
       }
-    };
-
-    if (editingTaskId) {
-        onEditTask(editingTaskId, taskData);
-    } else {
-        onAddTask(taskData);
-    }
-    
+    });
     setIsModalOpen(false);
     resetForm();
   };
@@ -143,115 +101,39 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onAddTask, onEditTask, onCom
     });
   };
 
-  // --- Drag and Drop Handlers ---
-  const handleDragStart = (e: React.DragEvent<HTMLDivElement>, position: number) => {
-    dragItem.current = position;
-    e.currentTarget.classList.add('opacity-50');
-  };
-
-  const handleDragEnter = (e: React.DragEvent<HTMLDivElement>, position: number) => {
-    dragOverItem.current = position;
-    e.preventDefault();
-  };
-
-  const handleDragEnd = (e: React.DragEvent<HTMLDivElement>) => {
-    e.currentTarget.classList.remove('opacity-50');
-    
-    if (dragItem.current !== null && dragOverItem.current !== null && onReorderTasks) {
-      const visibleTasks = getFilteredTasks();
-      const sourceTask = visibleTasks[dragItem.current];
-      const targetTask = visibleTasks[dragOverItem.current];
-      
-      const sourceIndex = tasks.findIndex(t => t.id === sourceTask.id);
-      const targetIndex = tasks.findIndex(t => t.id === targetTask.id);
-      
-      if (sourceIndex > -1 && targetIndex > -1) {
-          const newTasks = [...tasks];
-          const [movedItem] = newTasks.splice(sourceIndex, 1);
-          newTasks.splice(targetIndex, 0, movedItem);
-          onReorderTasks(newTasks);
-      }
-    }
-    
-    dragItem.current = null;
-    dragOverItem.current = null;
-  };
-
-  // --- Filtering Logic ---
-  
-  // Helper to check if a task is active for a specific date object
-  const isTaskScheduledForDate = (task: Task, dateObj: Date, dateString: string) => {
-      // 1. Explicit Date Match
-      if (task.dueDate === dateString) return true;
-
-      // 2. Recurrence Logic
-      if (task.recurrence) {
-          // If Weekly
-          if (task.recurrence.type === 'weekly' && task.recurrence.weekDays) {
-              const dayOfWeek = dateObj.getDay(); // 0 (Sun) - 6 (Sat)
-              if (task.recurrence.weekDays.includes(dayOfWeek)) return true;
-          }
-          // If Monthly
-          if (task.recurrence.type === 'monthly' && task.recurrence.monthDay) {
-              if (task.recurrence.monthDay === dateObj.getDate()) return true;
-          }
-          // If Daily
-          if (task.recurrence.type === 'daily') return true;
-          
-          // Custom recurrence usually requires a start date reference, skipping for now or treating as daily
-          if (task.recurrence.type === 'custom') return false; 
-      }
-
-      return false;
-  };
-
+  // --- Filtering & Sorting ---
   const getFilteredTasks = () => {
-    // Current "Game Time" Date Object
-    const gameNow = new Date();
-    gameNow.setHours(gameNow.getHours() - 7); // Adjust for 7AM rollover
+    const today = getGameDateString();
     
-    const todayStr = gameNow.toISOString().split('T')[0];
-    
-    // Calculate Tomorrow Object
-    const gameTomorrow = new Date(gameNow);
-    gameTomorrow.setDate(gameTomorrow.getDate() + 1);
-    const tomorrowStr = gameTomorrow.toISOString().split('T')[0];
+    // Calculate Tomorrow based on Game Date
+    const tomorrowDate = new Date(today); // Use the string YYYY-MM-DD to create date at midnight local (or UTC depending on browser, but consistent)
+    // Actually, safest way is to parse the string to avoid timezone shifts when creating the object
+    const [y, m, d] = today.split('-').map(Number);
+    const tDate = new Date(y, m - 1, d); // Month is 0-indexed
+    tDate.setDate(tDate.getDate() + 1);
+    const tmY = tDate.getFullYear();
+    const tmM = String(tDate.getMonth() + 1).padStart(2, '0');
+    const tmD = String(tDate.getDate()).padStart(2, '0');
+    const tomorrow = `${tmY}-${tmM}-${tmD}`;
 
     let filtered = tasks;
 
     if (filterType === 'today') {
-      filtered = tasks.filter(t => {
-          // If it's completed and not repeatable, allow standard filtering (usually handled by sort later)
-          if (t.completed && !t.isRepeatable) {
-              return t.dueDate === todayStr; 
-          }
-
-          // Check schedule
-          const isScheduled = isTaskScheduledForDate(t, gameNow, todayStr);
-          
-          // Show if scheduled OR (No Date AND No Recurrence = Backlog)
-          // If it has recurrence, it MUST match the schedule to appear.
-          if (isScheduled) return true;
-          if (!t.dueDate && (!t.recurrence || t.recurrence.type === 'once')) return true;
-          
-          return false;
-      });
+      filtered = tasks.filter(t => t.dueDate === today || (!t.dueDate && !t.completed));
     } else if (filterType === 'tomorrow') {
-      filtered = tasks.filter(t => {
-          return isTaskScheduledForDate(t, gameTomorrow, tomorrowStr);
-      });
+      filtered = tasks.filter(t => t.dueDate === tomorrow);
     } else if (filterType === 'urgent') {
       filtered = tasks.filter(t => t.isUrgent);
     } else if (filterType === 'tag' && selectedTag) {
       filtered = tasks.filter(t => t.tags.includes(selectedTag));
     }
 
-    // Sort: Urgent > Date > Completed (Last)
-    // Removed auto-sort by date to allow Manual Drag & Drop to persist in 'today'/'all' views mostly
+    // Sorting: Urgent > Date > Completed (Last)
     return filtered.sort((a, b) => {
-        if (a.completed !== b.completed) return a.completed ? 1 : -1;
-        // if (a.isUrgent !== b.isUrgent) return a.isUrgent ? -1 : 1;
-        return 0; 
+      if (a.completed !== b.completed) return a.completed ? 1 : -1;
+      if (a.isUrgent !== b.isUrgent) return a.isUrgent ? -1 : 1;
+      if (a.dueDate && b.dueDate) return a.dueDate.localeCompare(b.dueDate);
+      return 0;
     });
   };
 
@@ -264,16 +146,7 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onAddTask, onEditTask, onCom
     }
   };
 
-  const allTags = Array.from(new Set(tasks.flatMap(t => t.tags))) as string[];
-
-  // Define uma classe base para os botões de filtro para garantir consistência
-  const filterBtnClass = (isActive: boolean, colorClass: string = 'cyan') => `
-    px-4 py-2 rounded-lg text-xs font-bold whitespace-nowrap transition-all duration-200 
-    flex items-center gap-2 border shadow-sm active:scale-95 select-none
-    ${isActive 
-      ? `bg-${colorClass}-500/20 border-${colorClass}-500 text-${colorClass}-300 shadow-${colorClass}-900/20` 
-      : 'border-gray-600 text-gray-400 hover:bg-gray-800 hover:border-gray-500 hover:text-gray-200 bg-gray-900/50'}
-  `;
+  const allTags = Array.from(new Set(tasks.flatMap(t => t.tags)));
 
   return (
     <div className="flex flex-col h-full bg-gray-800/50 backdrop-blur-md border-l border-gray-700 shadow-2xl overflow-hidden relative">
@@ -283,47 +156,45 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onAddTask, onEditTask, onCom
         <h2 className="text-xl font-bold mb-4 flex items-center justify-between text-cyan-400">
           <span className="flex items-center gap-2"><Zap className="w-5 h-5" /> Tarefas</span>
           <button 
-            onClick={() => { resetForm(); setIsModalOpen(true); }}
-            className="bg-cyan-600 hover:bg-cyan-500 text-white p-2 rounded-lg transition-colors shadow-lg shadow-cyan-900/20 active:scale-95"
+            onClick={() => setIsModalOpen(true)}
+            className="bg-cyan-600 hover:bg-cyan-500 text-white p-2 rounded-lg transition-colors"
             title="Nova Tarefa"
           >
             <Plus className="w-5 h-5" />
           </button>
         </h2>
 
-        {/* Filters - Wrapped Grid Layout */}
-        <div className="flex flex-wrap gap-2 pb-2">
+        {/* Filters Scrollbar */}
+        <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-2">
           <button 
             onClick={() => setFilterType('today')}
-            className={filterBtnClass(filterType === 'today', 'cyan')}
+            className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-colors border ${filterType === 'today' ? 'bg-cyan-500/20 border-cyan-500 text-cyan-300' : 'border-gray-600 text-gray-400 hover:bg-gray-700'}`}
           >
-            Hoje
+            Hoje (Virtual)
           </button>
           <button 
             onClick={() => setFilterType('tomorrow')}
-            className={filterBtnClass(filterType === 'tomorrow', 'cyan')}
+            className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-colors border ${filterType === 'tomorrow' ? 'bg-cyan-500/20 border-cyan-500 text-cyan-300' : 'border-gray-600 text-gray-400 hover:bg-gray-700'}`}
           >
             Amanhã
           </button>
           <button 
             onClick={() => setFilterType('urgent')}
-            className={filterBtnClass(filterType === 'urgent', 'red')}
+            className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-colors border ${filterType === 'urgent' ? 'bg-red-500/20 border-red-500 text-red-300' : 'border-gray-600 text-gray-400 hover:bg-gray-700'}`}
           >
             Urgente
           </button>
           <button 
             onClick={() => setFilterType('all')}
-            className={filterBtnClass(filterType === 'all', 'cyan')}
+            className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-colors border ${filterType === 'all' ? 'bg-cyan-500/20 border-cyan-500 text-cyan-300' : 'border-gray-600 text-gray-400 hover:bg-gray-700'}`}
           >
             Todas
           </button>
-          
-          {/* Tags */}
           {allTags.map(tag => (
              <button 
              key={tag}
              onClick={() => { setFilterType('tag'); setSelectedTag(tag); }}
-             className={filterBtnClass(filterType === 'tag' && selectedTag === tag, 'purple')}
+             className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-colors border flex items-center gap-1 ${filterType === 'tag' && selectedTag === tag ? 'bg-purple-500/20 border-purple-500 text-purple-300' : 'border-gray-600 text-gray-400 hover:bg-gray-700'}`}
            >
              <Tag className="w-3 h-3" /> {tag}
            </button>
@@ -339,26 +210,11 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onAddTask, onEditTask, onCom
           </div>
         )}
         
-        {getFilteredTasks().map((task, index) => (
-          <div 
-            key={task.id} 
-            className={`group bg-gray-900 border ${task.isUrgent && !task.completed ? 'border-red-900/60 shadow-red-900/10' : 'border-gray-700'} rounded-xl transition-all hover:border-cyan-500/30 ${task.completed ? 'opacity-50 order-last' : ''}`}
-            draggable={!task.completed} // Only draggable if active
-            onDragStart={(e) => handleDragStart(e, index)}
-            onDragEnter={(e) => handleDragEnter(e, index)}
-            onDragEnd={handleDragEnd}
-            onDragOver={(e) => e.preventDefault()}
-          >
+        {getFilteredTasks().map((task) => (
+          <div key={task.id} className={`group bg-gray-900 border ${task.isUrgent && !task.completed ? 'border-red-900/60 shadow-red-900/10' : 'border-gray-700'} rounded-xl transition-all hover:border-cyan-500/30 ${task.completed ? 'opacity-50 order-last' : ''}`}>
             
             {/* Task Card Header (Compact) */}
-            <div className="p-3 flex items-start gap-2">
-              {/* Drag Handle */}
-              {!task.completed && (
-                  <div className="mt-1.5 cursor-grab active:cursor-grabbing text-gray-600 hover:text-gray-400">
-                      <GripVertical size={14} />
-                  </div>
-              )}
-
+            <div className="p-3 flex items-start gap-3">
               <button
                 onClick={() => onCompleteTask(task.id)}
                 className={`mt-1 w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${task.completed ? 'bg-green-500/20 border-green-500 text-green-500' : 'border-gray-500 hover:border-cyan-500 text-transparent hover:text-cyan-500'}`}
@@ -367,65 +223,46 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onAddTask, onEditTask, onCom
               </button>
               
               <div className="flex-1 min-w-0" onClick={() => setOpenDetailId(openDetailId === task.id ? null : task.id)}>
-                
-                {/* Title Line: Title Left, Subtask Counter Right */}
-                <div className="flex justify-between items-start mb-1">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className={`font-medium truncate cursor-pointer ${task.completed ? 'line-through text-gray-500' : 'text-gray-200'}`}>
-                        {task.title}
-                      </span>
-                      {task.isUrgent && !task.completed && <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />}
-                      {task.isRepeatable && (
-                        <span title="Repetível">
-                          <Repeat className="w-3 h-3 text-blue-400 shrink-0" />
-                        </span>
-                      )}
-                    </div>
-                    
-                    {/* Subtask Counter moved here (occupies same line as title, right aligned) */}
-                    {(task.subtasks.length > 0) && (
-                        <span className="text-gray-500 text-xs flex items-center gap-1 ml-2 whitespace-nowrap shrink-0 pt-0.5">
-                          {task.subtasks.filter(st => st.completed).length}/{task.subtasks.length}
-                          {openDetailId === task.id ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                        </span>
-                    )}
+                <div className="flex items-center gap-2 mb-1">
+                  <span className={`font-medium truncate cursor-pointer ${task.completed ? 'line-through text-gray-500' : 'text-gray-200'}`}>
+                    {task.title}
+                  </span>
+                  {task.isUrgent && !task.completed && <AlertTriangle className="w-4 h-4 text-red-400" />}
+                  {task.isRepeatable && (
+                    <span title="Repetível">
+                      <Repeat className="w-3 h-3 text-blue-400" />
+                    </span>
+                  )}
                 </div>
                 
                 <div className="flex flex-wrap gap-2 items-center text-xs">
                   <span className={`px-1.5 py-0.5 rounded border ${getDifficultyColor(task.difficulty)}`}>
                     {task.difficulty}
                   </span>
-                  
-                  {/* DATE LOGIC: Only show if Urgent OR Explicitly set (not empty) */}
-                  {(task.isUrgent || (task.dueDate && task.dueDate !== '')) && (
-                     <span className={`flex items-center gap-1 ${task.isUrgent ? 'text-red-400' : 'text-gray-400'}`}>
+                  {task.dueDate && (
+                     <span className="text-gray-400 flex items-center gap-1">
                        <Calendar className="w-3 h-3" />
-                       {task.dueDate ? new Date(task.dueDate).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : 'Hoje'}
+                       {new Date(task.dueDate).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
                      </span>
                   )}
-
                   {task.tags.slice(0, 2).map(t => (
                     <span key={t} className="text-purple-300 bg-purple-900/30 px-1.5 py-0.5 rounded">#{t}</span>
                   ))}
+                  {task.subtasks.length > 0 && (
+                    <span className="text-gray-500 ml-auto flex items-center gap-1">
+                      {task.subtasks.filter(st => st.completed).length}/{task.subtasks.length}
+                      {openDetailId === task.id ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                    </span>
+                  )}
                 </div>
               </div>
 
-              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button 
-                    onClick={() => handleEdit(task)}
-                    className="p-1.5 text-gray-600 hover:text-cyan-400 transition-colors"
-                    title="Editar"
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => onDeleteTask(task.id)}
-                    className="p-1.5 text-gray-600 hover:text-red-400 transition-colors"
-                    title="Excluir"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-              </div>
+              <button
+                onClick={() => onDeleteTask(task.id)}
+                className="p-1.5 text-gray-600 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
             </div>
 
             {/* Collapsible Details */}
@@ -456,11 +293,11 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onAddTask, onEditTask, onCom
         ))}
       </div>
 
-      {/* CREATE/EDIT TASK MODAL */}
+      {/* CREATE TASK MODAL */}
       {isModalOpen && (
         <div className="absolute inset-0 z-50 bg-gray-900/95 backdrop-blur-sm p-4 flex flex-col animate-in fade-in zoom-in-95 duration-200">
           <div className="flex justify-between items-center mb-4">
-            <h3 className="text-lg font-bold text-white">{editingTaskId ? 'Editar Tarefa' : 'Nova Tarefa'}</h3>
+            <h3 className="text-lg font-bold text-white">Nova Tarefa</h3>
             <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-white">
               <X className="w-6 h-6" />
             </button>
@@ -503,12 +340,12 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onAddTask, onEditTask, onCom
                 </select>
               </div>
               <div className="flex-1">
-                <label className="block text-xs text-gray-400 mb-1">Data (Opcional)</label>
+                <label className="block text-xs text-gray-400 mb-1">Data (Dia Virtual)</label>
                 <input 
                   type="date"
                   value={formData.dueDate}
                   onChange={e => setFormData({...formData, dueDate: e.target.value})}
-                  className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white focus:border-cyan-500 focus:outline-none placeholder-gray-500"
+                  className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white focus:border-cyan-500 focus:outline-none"
                 />
               </div>
             </div>
@@ -568,7 +405,7 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onAddTask, onEditTask, onCom
                    <input 
                     type="number" min="1" max="31"
                     value={formData.freqMonthDay}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({...formData, freqMonthDay: parseInt(e.target.value)})}
+                    onChange={e => setFormData({...formData, freqMonthDay: parseInt(e.target.value)})}
                     className="w-16 bg-gray-900 border border-gray-600 rounded p-1 text-center"
                    />
                  </div>
@@ -580,12 +417,12 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onAddTask, onEditTask, onCom
                    <input 
                     type="number" min="1"
                     value={formData.freqCustomValue}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({...formData, freqCustomValue: parseInt(e.target.value)})}
+                    onChange={e => setFormData({...formData, freqCustomValue: parseInt(e.target.value)})}
                     className="w-12 bg-gray-900 border border-gray-600 rounded p-1 text-center"
                    />
                    <select 
                      value={formData.freqCustomUnit}
-                     onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFormData({...formData, freqCustomUnit: e.target.value as 'day' | 'week' | 'month'})}
+                     onChange={e => setFormData({...formData, freqCustomUnit: e.target.value as any})}
                      className="bg-gray-900 border border-gray-600 rounded p-1 text-sm"
                    >
                      <option value="day">Dias</option>
@@ -613,21 +450,6 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onAddTask, onEditTask, onCom
                 className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white focus:border-cyan-500 focus:outline-none"
                 placeholder="Ex: trabalho, saúde..."
               />
-              {/* Sugestões de Tags */}
-              {allTags.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-2">
-                      <span className="text-xs text-gray-500 w-full mb-1">Sugestões:</span>
-                      {allTags.filter(t => !formData.tags.includes(t)).slice(0, 10).map(tag => (
-                          <button 
-                            key={tag} 
-                            onClick={() => addTag(tag)}
-                            className="text-[10px] bg-gray-800 hover:bg-gray-700 text-gray-300 px-2 py-1 rounded border border-gray-600 transition-colors"
-                          >
-                              {tag}
-                          </button>
-                      ))}
-                  </div>
-              )}
             </div>
 
             {/* Subtasks */}
@@ -656,9 +478,9 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onAddTask, onEditTask, onCom
 
           <button 
             onClick={handleSubmit}
-            className={`w-full text-white font-bold py-3 rounded-lg mt-4 shadow-lg ${editingTaskId ? 'bg-cyan-700 hover:bg-cyan-600 shadow-cyan-900/20' : 'bg-cyan-600 hover:bg-cyan-500 shadow-cyan-900/20'}`}
+            className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-3 rounded-lg mt-4 shadow-lg shadow-cyan-900/20"
           >
-            {editingTaskId ? 'Salvar Alterações' : 'Criar Tarefa'}
+            Criar Tarefa
           </button>
         </div>
       )}

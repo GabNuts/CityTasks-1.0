@@ -1,17 +1,6 @@
 
 // utils/timeHelpers.ts
 
-// --- GAME TIME LOGIC (7:00 AM Rollover) ---
-export const getGameDateString = (date: Date = new Date()): string => {
-  // Clona a data para não mutar o objeto original
-  const adjusted = new Date(date);
-  // Subtrai 7 horas. 
-  // Ex: 06:59 do dia 20 vira 23:59 do dia 19 (String do dia 19).
-  // Ex: 07:00 do dia 20 vira 00:00 do dia 20 (String do dia 20).
-  adjusted.setHours(adjusted.getHours() - 7);
-  return adjusted.toISOString().split('T')[0];
-};
-
 // --- PHASE CALCULATION ---
 // Simple implementation based on synodic month
 export const getMoonPhase = (date: Date) => {
@@ -69,6 +58,29 @@ export const getSeasonSouthernHemisphere = (date: Date) => {
   } else {
     return { name: 'Primavera', icon: 'flower' };
   }
+};
+
+// --- SUNSET/SUNRISE CALCULATION ---
+export const getSunTimes = (date: Date) => {
+    const season = getSeasonSouthernHemisphere(date).name;
+    let sunrise = 6.0; // 06:00
+    let sunset = 18.5; // 18:30 (Default Spring/Autumn)
+
+    if (season === 'Verão') {
+        sunrise = 5.5;  // 05:30
+        sunset = 19.5;  // 19:30
+    } else if (season === 'Inverno') {
+        sunrise = 7.0;  // 07:00
+        sunset = 17.5;  // 17:30
+    }
+    
+    return { sunrise, sunset };
+};
+
+export const isNightTime = (date: Date = new Date()): boolean => {
+    const { sunrise, sunset } = getSunTimes(date);
+    const currentHour = date.getHours() + (date.getMinutes() / 60);
+    return currentHour < sunrise || currentHour >= sunset;
 };
 
 // --- PRECISE ASTRONOMY (SOLSTICE/EQUINOX) ---
@@ -244,23 +256,43 @@ export const getMonthlyMoonPhases = (year: number, month: number) => {
 
 // --- GENERAL UTILS ---
 
+// NOVA LÓGICA: O dia do jogo só vira as 07:00 AM.
+const GAME_DAY_START_HOUR = 7;
+
+/**
+ * Retorna um objeto Date ajustado para a lógica do jogo.
+ * Se for antes das 7 da manhã, retorna o dia anterior.
+ */
+export const getAdjustedDate = (date: Date = new Date()): Date => {
+    const adjusted = new Date(date);
+    adjusted.setHours(adjusted.getHours() - GAME_DAY_START_HOUR);
+    return adjusted;
+};
+
+/**
+ * Retorna string YYYY-MM-DD baseada no dia ajustado (Virtual Day).
+ * Use isso para salvar/filtrar tarefas.
+ */
+export const getGameDateString = (date: Date = new Date()): string => {
+    const adjusted = getAdjustedDate(date);
+    const y = adjusted.getFullYear();
+    const m = String(adjusted.getMonth() + 1).padStart(2, '0');
+    const d = String(adjusted.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+};
+
 export const getGameDay = (createdAt: number) => {
-  // Ajusta a data de criação para o horário do jogo (subtrai 7h) e zera a hora
-  const createdDate = new Date(createdAt);
-  createdDate.setHours(createdDate.getHours() - 7);
-  createdDate.setHours(0, 0, 0, 0);
+  // Ajusta também a data de criação para comparar laranjas com laranjas
+  const startDate = getAdjustedDate(new Date(createdAt));
+  const now = getAdjustedDate(new Date());
 
-  // Ajusta a data atual para o horário do jogo e zera a hora
-  const nowDate = new Date();
-  nowDate.setHours(nowDate.getHours() - 7);
-  nowDate.setHours(0, 0, 0, 0);
+  // Reset to midnight to calculate calendar days passed relative to Game Day Start
+  startDate.setHours(0, 0, 0, 0);
+  now.setHours(0, 0, 0, 0);
 
-  // Diferença em milissegundos entre as datas zeradas (meia-noite do jogo)
-  const diff = nowDate.getTime() - createdDate.getTime();
-  
-  // Converte para dias
+  const diff = now.getTime() - startDate.getTime();
   const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-  return days + 1; // Dia 1 é o dia da criação
+  return days + 1; // Day 1 is the creation day
 };
 
 export const formatTime = (date: Date) => {
@@ -268,22 +300,14 @@ export const formatTime = (date: Date) => {
 };
 
 export const formatDateFull = (date: Date) => {
-  // Ex: "sexta-feira, 19 de dezembro de 2025"
-  const options: Intl.DateTimeFormatOptions = { 
-    weekday: 'long', 
-    year: 'numeric', 
-    month: 'long', 
-    day: 'numeric' 
-  };
-  
-  // Remove "-feira" do retorno
-  let str = date.toLocaleDateString('pt-BR', options).replace('-feira', '');
-  
-  // Capitaliza o mês (encontra " de [letra]" e transforma em " de [Letra]")
-  // Mantém o dia da semana em minúsculo
-  str = str.replace(/ de ([a-z])/g, (match, char) => ` de ${char.toUpperCase()}`);
-  
-  return str;
+  // Ex: "terça, 23 de Dezembro de 2025"
+  const weekday = date.toLocaleDateString('pt-BR', { weekday: 'long' }).replace('-feira', '');
+  const day = date.getDate();
+  const month = date.toLocaleDateString('pt-BR', { month: 'long' });
+  const capitalizedMonth = month.charAt(0).toUpperCase() + month.slice(1);
+  const year = date.getFullYear();
+
+  return `${weekday}, ${day} de ${capitalizedMonth} de ${year}`;
 };
 
 export const getWorldTime = (offset: number) => {

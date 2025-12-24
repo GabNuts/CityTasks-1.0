@@ -238,10 +238,10 @@ export const createFence = (w: number, d: number, x: number, z: number, isNight:
     return g;
 };
 
-export const createFlag = (x: number, z: number, isNight: boolean) => {
+export const createFlag = (x: number, z: number, isNight: boolean, color: number = 0x4caf50) => {
     const g = new THREE.Group();
     g.add(createBox(0.05, 2.5, 0.05, 0xeeeeee, x, 1.25, z, isNight));
-    const flagColor = 0x4caf50; 
+    const flagColor = color; 
     const flag = createBox(0.6, 0.4, 0.02, flagColor, x + 0.3, 2.3, z, isNight);
     flag.rotation.y = 0.2;
     g.add(flag);

@@ -1,3 +1,4 @@
+
 import * as THREE from 'three';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import { Building } from '../types';
@@ -337,6 +338,7 @@ export const createRoad = (group: THREE.Group, x: number, z: number, neighbors: 
 export const createBonfire = (x: number, z: number, isNight: boolean): THREE.Group => {
     const group = new THREE.Group();
     group.position.set(x, 0, z);
+    group.scale.set(1.5, 1.5, 1.5); // Scaled by 50%
     const woodColor = 0x5d4037;
     for(let i=0; i<3; i++) {
         const log = createBox(0.6, 0.1, 0.1, woodColor, 0, 0.05 + (i*0.05), 0, isNight);
@@ -396,14 +398,19 @@ const createCaipiraCrowd = (group: THREE.Group, centerX: number, centerZ: number
         const px = centerX + Math.cos(angle) * dist;
         const pz = centerZ + Math.sin(angle) * dist;
         const shirtColor = shirtColors[Math.floor(random() * shirtColors.length)];
+        
         const pGroup = new THREE.Group();
         pGroup.position.set(px, 0.25 * scale, pz);
         pGroup.lookAt(centerX, 0.25 * scale, centerZ);
-        pGroup.userData = { type: 'caipira', offset: random() * Math.PI };
+        
+        // AQUI ESTÁ A CORREÇÃO: Passamos centerX e centerZ para a animação saber onde orbitar
+        pGroup.userData = { type: 'caipira', offset: random() * Math.PI, centerX, centerZ };
+        
         pGroup.add(createBox(0.3 * scale, 0.5 * scale, 0.2 * scale, shirtColor, 0, 0, 0, isNight));
         pGroup.add(createBox(0.12 * scale, 0.5 * scale, 0.15 * scale, 0x1565c0, -0.08*scale, -0.4*scale, 0, isNight));
         pGroup.add(createBox(0.12 * scale, 0.5 * scale, 0.15 * scale, 0x1565c0, 0.08*scale, -0.4*scale, 0, isNight));
         pGroup.add(createBox(0.2 * scale, 0.2 * scale, 0.2 * scale, 0xffcc80, 0, 0.35 * scale, 0, isNight));
+        
         const hatColor = 0xffeb3b;
         const hatBrim = new THREE.Mesh(new THREE.CylinderGeometry(0.25*scale, 0.25*scale, 0.02*scale, 8), new THREE.MeshStandardMaterial({color: hatColor}));
         hatBrim.position.y = 0.45 * scale;
@@ -411,6 +418,7 @@ const createCaipiraCrowd = (group: THREE.Group, centerX: number, centerZ: number
         const hatTop = new THREE.Mesh(new THREE.CylinderGeometry(0.15*scale, 0.15*scale, 0.15*scale, 8), new THREE.MeshStandardMaterial({color: hatColor}));
         hatTop.position.y = 0.52 * scale;
         pGroup.add(hatTop);
+        
         const armColor = shirtColor;
         const arm1 = createBox(0.08 * scale, 0.4 * scale, 0.08 * scale, armColor, -0.2*scale, 0.2*scale, 0.1*scale, isNight);
         arm1.rotation.z = 2.5; 
@@ -418,6 +426,7 @@ const createCaipiraCrowd = (group: THREE.Group, centerX: number, centerZ: number
         const arm2 = createBox(0.08 * scale, 0.4 * scale, 0.08 * scale, armColor, 0.2*scale, 0.2*scale, 0.1*scale, isNight);
         arm2.rotation.z = -2.5; 
         pGroup.add(arm2);
+        
         group.add(pGroup);
     }
 };
@@ -438,7 +447,7 @@ export const createPumpkin = (x: number, z: number, isNight: boolean): THREE.Mes
     body.scale.set(1, 0.8, 1);
     body.position.y = 0.15; 
     pumpkin.add(body);
-    const stem = createBox(0.04, 0.08, 0.04, 0x33691e, 0, 0.3, 0, isNight);
+    const stem = createBox(0.04, 0.08, 0.04, 0x333333, 0, 0.3, 0, isNight);
     pumpkin.add(stem);
     if (isNight) {
         const eyeColor = 0xffeb3b;
@@ -464,7 +473,7 @@ export const createEasterEgg = (x: number, z: number, isNight: boolean): THREE.M
     const ribbonColor = pair[1];
     const group = new THREE.Group();
     group.position.set(x, 0.12, z); 
-    const baseRadius = 0.08; 
+    const baseRadius = 0.12; // Radius increased to 0.12 (50% bigger)
     const geo = new THREE.SphereGeometry(baseRadius, 16, 16);
     const mat = new THREE.MeshStandardMaterial({
         color: eggColor, 
@@ -553,6 +562,328 @@ export const createRareVehicleMesh = (id: string, isNight: boolean): THREE.Objec
         const addWheel = (x: number, z: number) => { const w = createLitBox(0.4*s, 0.4*s, 0.15*s, wheelColor, x, 0.2*s, z); const h = createLitBox(0.2*s, 0.2*s, 0.2*s, 0xdddddd, x, 0.2*s, z); group.add(w); group.add(h); };
         addWheel(0.7*s, 0.45*s); addWheel(0.7*s, -0.45*s); addWheel(-0.7*s, 0.45*s); addWheel(-0.7*s, -0.45*s);
     } 
+    else if (id === 'ecto1') {
+        const white = 0xffffff; const red = 0xd32f2f; const chrome = 0xe0e0e0; const black = 0x111111;
+        const glass = 0x81d4fa; const yellow = 0xffeb3b;
+        
+        // Chassi (Cadillac Miller-Meteor)
+        group.add(createLitBox(2.6*s, 0.35*s, 1.1*s, white, 0, 0.35*s, 0));
+        // Cabine Superior (Ambulância)
+        group.add(createLitBox(1.8*s, 0.3*s, 1.05*s, white, -0.2*s, 0.65*s, 0));
+        
+        // Vidros
+        group.add(createLitBox(0.1*s, 0.28*s, 1.0*s, glass, 0.7*s, 0.65*s, 0)); // Para-brisa
+        group.add(createLitBox(1.6*s, 0.25*s, 1.07*s, glass, -0.2*s, 0.65*s, 0)); // Laterais
+        
+        // Capô e Frente
+        group.add(createLitBox(0.9*s, 0.1*s, 1.05*s, white, 0.9*s, 0.45*s, 0));
+        group.add(createLitBox(0.1*s, 0.25*s, 1.0*s, chrome, 1.35*s, 0.35*s, 0)); // Grade frontal
+        
+        // Barbatanas Traseiras (Fins) Vermelhas
+        const finL = createLitBox(0.6*s, 0.4*s, 0.1*s, red, -1.0*s, 0.7*s, 0.5*s);
+        const finR = createLitBox(0.6*s, 0.4*s, 0.1*s, red, -1.0*s, 0.7*s, -0.5*s);
+        // Design curvado da barbatana
+        finL.rotation.z = -0.1; finR.rotation.z = -0.1;
+        group.add(finL); group.add(finR);
+
+        // Faixa Vermelha Lateral
+        group.add(createLitBox(1.5*s, 0.08*s, 1.11*s, red, -0.1*s, 0.4*s, 0));
+
+        // Rack de Teto (Equipamentos Ghostbusters)
+        const rackY = 0.85*s;
+        group.add(createLitBox(1.4*s, 0.05*s, 0.8*s, chrome, -0.2*s, rackY, 0)); // Base Rack
+        
+        // Tanques e Caixas no teto
+        group.add(createLitBox(0.25*s, 0.2*s, 0.25*s, yellow, -0.4*s, rackY+0.12*s, 0.2*s)); // Tanque amarelo
+        group.add(createLitBox(0.3*s, 0.15*s, 0.2*s, 0x4caf50, 0.1*s, rackY+0.1*s, -0.2*s)); // Caixa verde
+        group.add(createLitBox(0.6*s, 0.05*s, 0.05*s, 0x2196f3, -0.2*s, rackY+0.2*s, 0)); // Tubo azul
+        
+        // Sirenes e Luzes
+        const blueLight = 0x00e5ff; const redLight = 0xff1744;
+        const lightBar = createLitBox(0.1*s, 0.15*s, 0.8*s, chrome, 0.6*s, rackY+0.1*s, 0); group.add(lightBar);
+        const s1 = createLitBox(0.1*s, 0.12*s, 0.12*s, blueLight, 0.6*s, rackY+0.22*s, 0.3*s); group.add(s1);
+        const s2 = createLitBox(0.1*s, 0.12*s, 0.12*s, blueLight, 0.6*s, rackY+0.22*s, -0.3*s); group.add(s2);
+        const s3 = createLitBox(0.12*s, 0.14*s, 0.14*s, redLight, 0.6*s, rackY+0.22*s, 0); group.add(s3); // Giroflex central
+        
+        // Sniffer (Tubo lateral)
+        group.add(createLitBox(0.8*s, 0.04*s, 0.04*s, 0x2196f3, -0.3*s, rackY+0.1*s, -0.55*s));
+
+        if (isNight) {
+            // Brilho intenso das sirenes
+            (s1.material as THREE.MeshStandardMaterial).emissiveIntensity = 2.0;
+            (s2.material as THREE.MeshStandardMaterial).emissiveIntensity = 2.0;
+            (s3.material as THREE.MeshStandardMaterial).emissiveIntensity = 2.0;
+            
+            // Faróis
+            const hlL = createLitBox(0.05*s, 0.12*s, 0.12*s, 0xffeb3b, 1.36*s, 0.35*s, 0.35*s);
+            const hlR = createLitBox(0.05*s, 0.12*s, 0.12*s, 0xffeb3b, 1.36*s, 0.35*s, -0.35*s);
+            (hlL.material as THREE.MeshStandardMaterial).emissiveIntensity = 2.0;
+            (hlR.material as THREE.MeshStandardMaterial).emissiveIntensity = 2.0;
+            group.add(hlL); group.add(hlR);
+        }
+
+        // Rodas (Calotas cromadas clássicas)
+        const addClassicWheel = (x: number, z: number) => {
+            const w = createLitBox(0.45*s, 0.45*s, 0.2*s, black, x, 0.22*s, z);
+            const cap = createLitBox(0.25*s, 0.25*s, 0.22*s, chrome, x, 0.22*s, z);
+            const detail = createLitBox(0.1*s, 0.1*s, 0.24*s, red, x, 0.22*s, z); // Detalhe vermelho no centro
+            group.add(w); group.add(cap); group.add(detail);
+        };
+        addClassicWheel(0.8*s, 0.5*s); addClassicWheel(0.8*s, -0.5*s); 
+        addClassicWheel(-0.9*s, 0.5*s); addClassicWheel(-0.9*s, -0.5*s);
+        
+        // Para-choques
+        group.add(createLitBox(0.2*s, 0.15*s, 1.15*s, chrome, 1.4*s, 0.15*s, 0)); // Dianteiro
+        group.add(createLitBox(0.2*s, 0.15*s, 1.15*s, chrome, -1.4*s, 0.2*s, 0)); // Traseiro
+    }
+    else if (id === 'jp_jeep') {
+        // Ford Explorer Tour Vehicle (Jurassic Park) - Versão Detalhada
+        const yellow = 0xffeb3b; // Amarelo vibrante base
+        const green = 0x2e7d32;  // Verde selva (topo)
+        const red = 0x8b0000;    // Vermelho escuro (faixas)
+        const black = 0x111111;  // Preto fosco
+        const glass = 0x81d4fa;  // Vidro azulado
+        const chrome = 0xcccccc; // Prata/Cromado
+        const white = 0xffffff;  // Faróis
+
+        // --- CARROCERIA (Pintura em 3 tons) ---
+        // 1. Base Amarela (Saias laterais)
+        group.add(createLitBox(2.2*s, 0.25*s, 1.1*s, yellow, 0, 0.25*s, 0));
+        
+        // 2. Faixa Vermelha Separadora
+        group.add(createLitBox(2.22*s, 0.05*s, 1.12*s, red, 0, 0.4*s, 0));
+
+        // 3. Parte Superior Verde (Capô e laterais)
+        group.add(createLitBox(2.1*s, 0.2*s, 1.05*s, green, 0, 0.52*s, 0));
+
+        // Cabine Principal (Verde)
+        group.add(createLitBox(1.3*s, 0.3*s, 1.0*s, green, -0.2*s, 0.75*s, 0));
+
+        // --- TETO PANORÂMICO (Bolha de Vidro) ---
+        // A peça mais icônica deste veículo
+        const roofBubble = createLitBox(1.0*s, 0.15*s, 0.8*s, glass, -0.2*s, 0.95*s, 0, true);
+        (roofBubble.material as THREE.MeshStandardMaterial).opacity = 0.6; // Transparente
+        group.add(roofBubble);
+
+        // --- VIDROS ---
+        // Pára-brisa inclinado
+        const windshield = createLitBox(0.05*s, 0.38*s, 0.95*s, glass, 0.5*s, 0.75*s, 0);
+        windshield.rotation.z = -0.35; group.add(windshield);
+
+        // Janelas Laterais (Grandes e contínuas)
+        group.add(createLitBox(1.25*s, 0.25*s, 1.08*s, glass, -0.25*s, 0.75*s, 0, true));
+        // Colunas das janelas (Pretas para dar realismo entre os vidros)
+        group.add(createLitBox(0.1*s, 0.26*s, 1.09*s, black, -0.25*s, 0.75*s, 0));
+        
+        // Vidro Traseiro
+        group.add(createLitBox(0.05*s, 0.3*s, 0.9*s, glass, -0.9*s, 0.75*s, 0));
+
+        // --- DETALHES FRONTAIS ---
+        // Detalhe no Capô (Ressalto verde)
+        group.add(createLitBox(0.85*s, 0.05*s, 1.02*s, green, 0.75*s, 0.55*s, 0));
+        
+        // Grade Frontal
+        group.add(createLitBox(0.1*s, 0.25*s, 1.0*s, black, 1.15*s, 0.35*s, 0));
+        // Logo Ford (Pequeno ponto azul)
+        group.add(createLitBox(0.02*s, 0.05*s, 0.1*s, 0x1565c0, 1.21*s, 0.35*s, 0));
+
+        // QUEBRA-MATO (Brush Guard)
+        const guardGroup = new THREE.Group();
+        guardGroup.position.set(1.25*s, 0.3*s, 0);
+        // Barras verticais
+        guardGroup.add(createLitBox(0.05*s, 0.5*s, 0.05*s, black, 0, 0.1*s, 0.25*s));
+        guardGroup.add(createLitBox(0.05*s, 0.5*s, 0.05*s, black, 0, 0.1*s, -0.25*s));
+        // Barras horizontais
+        guardGroup.add(createLitBox(0.05*s, 0.05*s, 1.1*s, black, 0, 0.2*s, 0));
+        guardGroup.add(createLitBox(0.05*s, 0.05*s, 1.1*s, black, 0, -0.1*s, 0));
+        group.add(guardGroup);
+
+        // Faróis Principais (Retangulares)
+        const hlL = createLitBox(0.05*s, 0.12*s, 0.18*s, white, 1.16*s, 0.4*s, 0.35*s);
+        const hlR = createLitBox(0.05*s, 0.12*s, 0.18*s, white, 1.16*s, 0.4*s, -0.35*s);
+        group.add(hlL); group.add(hlR);
+
+        // --- LUZES AUXILIARES ---
+        // Spotlights (Milhas) na frente do pára-brisa
+        const spotGeo = new THREE.CylinderGeometry(0.05*s, 0.05*s, 0.02*s);
+        const spotHousing = new THREE.BoxGeometry(0.05*s, 0.1*s, 0.1*s);
+        const spotMat = new THREE.MeshStandardMaterial({color: black});
+        const lensMat = new THREE.MeshStandardMaterial({color: white, emissive: white, emissiveIntensity: isNight ? 2 : 0});
+        
+        const addSpot = (x: number, y: number, z: number) => {
+            const h = new THREE.Mesh(spotHousing, spotMat); h.position.set(x, y, z);
+            const l = new THREE.Mesh(spotGeo, lensMat); l.rotation.z = Math.PI/2; l.position.set(x+0.03*s, y, z);
+            group.add(h); group.add(l);
+        };
+        addSpot(0.55*s, 0.95*s, 0.3*s);
+        addSpot(0.55*s, 0.95*s, -0.3*s);
+
+        // --- RODAS (Aros Amarelos Clássicos) ---
+        const addExpWheel = (x: number, z: number) => {
+            // Pneu
+            const w = createLitBox(0.5*s, 0.5*s, 0.25*s, black, x, 0.25*s, z);
+            // Aro Amarelo
+            const rim = createLitBox(0.3*s, 0.3*s, 0.27*s, yellow, x, 0.25*s, z);
+            // Centro Cromado
+            const hub = createLitBox(0.1*s, 0.1*s, 0.29*s, chrome, x, 0.25*s, z);
+            group.add(w); group.add(rim); group.add(hub);
+        };
+        addExpWheel(0.8*s, 0.55*s); addExpWheel(0.8*s, -0.55*s);
+        addExpWheel(-0.8*s, 0.55*s); addExpWheel(-0.8*s, -0.55*s);
+
+        // --- TRASEIRA ---
+        // Estepe coberto
+        const spareGeo = new THREE.CylinderGeometry(0.22*s, 0.22*s, 0.1*s, 16);
+        const spareMat = new THREE.MeshStandardMaterial({color: black});
+        const spare = new THREE.Mesh(spareGeo, spareMat);
+        spare.rotation.x = Math.PI/2; spare.rotation.z = Math.PI/2;
+        spare.position.set(-1.11*s, 0.5*s, 0);
+        group.add(spare);
+
+        // Luzes Noturnas
+        if(isNight) {
+            (hlL.material as THREE.MeshStandardMaterial).emissiveIntensity = 3.0; (hlL.material as THREE.MeshStandardMaterial).emissive.setHex(white);
+            (hlR.material as THREE.MeshStandardMaterial).emissiveIntensity = 3.0; (hlR.material as THREE.MeshStandardMaterial).emissive.setHex(white);
+            // Lanternas traseiras vermelhas
+            const tlL = createLitBox(0.05*s, 0.2*s, 0.1*s, 0xff0000, -1.1*s, 0.5*s, 0.45*s);
+            const tlR = createLitBox(0.05*s, 0.2*s, 0.1*s, 0xff0000, -1.1*s, 0.5*s, -0.45*s);
+            (tlL.material as THREE.MeshStandardMaterial).emissiveIntensity = 2.0; (tlL.material as THREE.MeshStandardMaterial).emissive.setHex(0xff0000);
+            (tlR.material as THREE.MeshStandardMaterial).emissiveIntensity = 2.0; (tlR.material as THREE.MeshStandardMaterial).emissive.setHex(0xff0000);
+            group.add(tlL); group.add(tlR);
+        }
+        
+        // Antena longa (atrás)
+        group.add(createLitBox(0.02*s, 1.2*s, 0.02*s, black, -1.0*s, 1.0*s, 0.5*s));
+    }
+    else if (id === 'tron_bike') {
+        // Estilo Flynn/Tron (Ciano Neon)
+        const black = 0x050505; const neon = 0x00e5ff; const white = 0xffffff;
+        
+        // Corpo central alongado e curvo (low profile)
+        group.add(createLitBox(1.8*s, 0.4*s, 0.5*s, black, 0, 0.3*s, 0));
+        // Carenagem superior (Shell)
+        group.add(createLitBox(1.2*s, 0.2*s, 0.55*s, black, 0, 0.5*s, 0));
+        
+        // Neon Strips (O detalhe principal)
+        // Faixa lateral superior
+        const stripMat = new THREE.MeshStandardMaterial({color: neon, emissive: neon, emissiveIntensity: isNight ? 3.0 : 1.0});
+        const stripGeo = new THREE.BoxGeometry(1.6*s, 0.05*s, 0.52*s);
+        const strip = new THREE.Mesh(stripGeo, stripMat); strip.position.set(0, 0.45*s, 0); group.add(strip);
+        
+        // Faixas nas rodas (Aros Brilhantes)
+        const wheelGeo = new THREE.TorusGeometry(0.4*s, 0.08*s, 16, 32);
+        const wheelMat = new THREE.MeshStandardMaterial({color: black}); 
+        const glowRingGeo = new THREE.TorusGeometry(0.4*s, 0.04*s, 16, 32); // Anel de neon
+        
+        // Roda Dianteira
+        const wF = new THREE.Mesh(wheelGeo, wheelMat); wF.position.set(0.8*s, 0.4*s, 0); group.add(wF);
+        const gF = new THREE.Mesh(glowRingGeo, stripMat); gF.position.set(0.8*s, 0.4*s, 0); group.add(gF);
+        // Roda Traseira
+        const wR = new THREE.Mesh(wheelGeo, wheelMat); wR.position.set(-0.8*s, 0.4*s, 0); group.add(wR);
+        const gR = new THREE.Mesh(glowRingGeo, stripMat); gR.position.set(-0.8*s, 0.4*s, 0); group.add(gR);
+
+        // Preenchimento central das rodas (Hubs pretos)
+        const hubGeo = new THREE.CylinderGeometry(0.35*s, 0.35*s, 0.2*s, 32);
+        const hubMat = new THREE.MeshStandardMaterial({color: 0x000000, roughness: 0.2});
+        const hF = new THREE.Mesh(hubGeo, hubMat); hF.rotation.x = Math.PI/2; hF.position.set(0.8*s, 0.4*s, 0); group.add(hF);
+        const hR = new THREE.Mesh(hubGeo, hubMat); hR.rotation.x = Math.PI/2; hR.position.set(-0.8*s, 0.4*s, 0); group.add(hR);
+
+        // Piloto (Abstrato, fundido à moto)
+        group.add(createLitBox(0.6*s, 0.15*s, 0.3*s, 0x222222, -0.1*s, 0.65*s, 0)); // Costas
+        // Capacete com brilho
+        const helm = createLitBox(0.25*s, 0.2*s, 0.25*s, black, 0.3*s, 0.7*s, 0);
+        group.add(helm);
+        const visor = createLitBox(0.15*s, 0.05*s, 0.26*s, neon, 0.35*s, 0.72*s, 0, false);
+        (visor.material as THREE.MeshStandardMaterial).emissiveIntensity = 2.0; group.add(visor);
+
+        // Rastro de Luz (Trail) - Pequeno atrás
+        if (isNight) {
+            const trail = new THREE.Mesh(new THREE.PlaneGeometry(1.0*s, 0.4*s), new THREE.MeshStandardMaterial({
+                color: neon, emissive: neon, emissiveIntensity: 2.0, transparent: true, opacity: 0.5, side: THREE.DoubleSide
+            }));
+            trail.position.set(-1.6*s, 0.4*s, 0);
+            group.add(trail);
+            // Luz de chão azul
+            const groundLight = new THREE.PointLight(neon, 2, 4);
+            groundLight.position.set(0, 0.5*s, 0);
+            group.add(groundLight);
+        }
+    }
+    else if (id === 'batmobile') {
+        // Estilo 1989 (Burton) - Longo, Turbina, Asas de Morcego
+        const black = 0x050505; const darkGrey = 0x222222; const yellow = 0xffeb3b; const orange = 0xff6d00;
+        
+        // Corpo principal longo e fuselagem
+        group.add(createLitBox(3.0*s, 0.3*s, 1.0*s, black, 0, 0.3*s, 0));
+        // Frente arredondada (Turbina)
+        const turbineGeo = new THREE.CylinderGeometry(0.3*s, 0.3*s, 0.4*s, 16);
+        const turbineMat = new THREE.MeshStandardMaterial({color: 0x111111});
+        const turbine = new THREE.Mesh(turbineGeo, turbineMat);
+        turbine.rotation.z = Math.PI/2; turbine.position.set(1.5*s, 0.4*s, 0); group.add(turbine);
+        
+        // Glow da Turbina
+        const intakeGeo = new THREE.CylinderGeometry(0.15*s, 0.05*s, 0.1*s, 16);
+        const intakeMat = new THREE.MeshStandardMaterial({color: yellow, emissive: yellow, emissiveIntensity: isNight ? 2.0 : 0.5});
+        const intake = new THREE.Mesh(intakeGeo, intakeMat);
+        intake.rotation.z = Math.PI/2; intake.position.set(1.66*s, 0.4*s, 0); group.add(intake);
+
+        // Cockpit (Canopy deslizante)
+        group.add(createLitBox(0.8*s, 0.2*s, 0.7*s, darkGrey, -0.2*s, 0.55*s, 0));
+        // Janelas amareladas escuras
+        const windowL = createLitBox(0.5*s, 0.1*s, 0.05*s, 0x333333, -0.2*s, 0.6*s, 0.36*s); group.add(windowL);
+        const windowR = createLitBox(0.5*s, 0.1*s, 0.05*s, 0x333333, -0.2*s, 0.6*s, -0.36*s); group.add(windowR);
+
+        // Asas de Morcego Traseiras (Fins)
+        const finGeo = new THREE.BoxGeometry(0.8*s, 0.6*s, 0.1*s);
+        const finMat = new THREE.MeshStandardMaterial({color: black});
+        const finL = new THREE.Mesh(finGeo, finMat); 
+        finL.position.set(-1.0*s, 0.65*s, 0.4*s); 
+        // Esculpir a asa (rotação simples para simular curva)
+        finL.rotation.x = -0.1;
+        group.add(finL);
+        
+        const finR = new THREE.Mesh(finGeo, finMat); 
+        finR.position.set(-1.0*s, 0.65*s, -0.4*s); 
+        finR.rotation.x = 0.1;
+        group.add(finR);
+
+        // Entradas de ar laterais
+        group.add(createLitBox(0.6*s, 0.3*s, 0.2*s, black, 0.5*s, 0.4*s, 0.5*s));
+        group.add(createLitBox(0.6*s, 0.3*s, 0.2*s, black, 0.5*s, 0.4*s, -0.5*s));
+
+        // Afterburner (Traseira)
+        const burnerGeo = new THREE.CylinderGeometry(0.2*s, 0.15*s, 0.2*s, 16);
+        const burnerMat = new THREE.MeshStandardMaterial({color: 0x222222});
+        const burner = new THREE.Mesh(burnerGeo, burnerMat);
+        burner.rotation.z = Math.PI/2; burner.position.set(-1.6*s, 0.4*s, 0); group.add(burner);
+        
+        if (isNight) {
+            // Fogo do escapamento
+            const flame = new THREE.PointLight(orange, 3, 6);
+            flame.position.set(-1.8*s, 0.4*s, 0);
+            group.add(flame);
+            const flameCore = createLitBox(0.1*s, 0.1*s, 0.1*s, orange, -1.7*s, 0.4*s, 0, false);
+            (flameCore.material as THREE.MeshStandardMaterial).emissiveIntensity = 4.0;
+            group.add(flameCore);
+            
+            // Faróis dianteiros (amarelos profundos)
+            const hlL = createLitBox(0.05*s, 0.15*s, 0.15*s, yellow, 1.2*s, 0.3*s, 0.35*s);
+            (hlL.material as THREE.MeshStandardMaterial).emissiveIntensity = 2.0; group.add(hlL);
+            const hlR = createLitBox(0.05*s, 0.15*s, 0.15*s, yellow, 1.2*s, 0.3*s, -0.35*s);
+            (hlR.material as THREE.MeshStandardMaterial).emissiveIntensity = 2.0; group.add(hlR);
+        }
+
+        // Rodas (Pretas com calota central metálica)
+        const addBatWheel = (x: number, z: number, scale: number) => {
+            const w = createLitBox(0.5*s*scale, 0.5*s*scale, 0.25*s, black, x, 0.25*s*scale, z);
+            const cap = createLitBox(0.2*s*scale, 0.2*s*scale, 0.27*s, 0x555555, x, 0.25*s*scale, z);
+            // Detalhe de morcego na roda (pontinho amarelo)
+            const dot = createLitBox(0.05*s, 0.05*s, 0.28*s, yellow, x, 0.25*s*scale, z);
+            group.add(w); group.add(cap); group.add(dot);
+        };
+        addBatWheel(0.9*s, 0.5*s, 0.9); addBatWheel(0.9*s, -0.5*s, 0.9); // Frente menor
+        addBatWheel(-0.9*s, 0.6*s, 1.2); addBatWheel(-0.9*s, -0.6*s, 1.2); // Trás maior
+    }
     else if (id === 'mystery_machine') {
         const cyan = 0x00bcd4; const green = 0x76ff03; const orange = 0xff9800; const black = 0x111111;
         group.add(createLitBox(2.2*s, 1.0*s, 1.0*s, cyan, 0, 0.6*s, 0));
@@ -813,155 +1144,142 @@ export const createRareVehicleMesh = (id: string, isNight: boolean): THREE.Objec
     return group;
 };
 
-// --- EXPORTED HELPERS ---
-export type IndSignType = 'gear' | 'hammer' | 'chair' | 'spool' | 'chip' | 'leaf' | 'cloud' | 'box' | 'rocket' | 'dna';
-export const getTextSignTexture = (text: string, bg: string, textColor: string = '#ffffff'): THREE.Texture => {
-    const key = `text_${text}_${bg}_${textColor}`;
-    if (texCache[key]) return texCache[key];
-    texCache[key] = createTextureFromCanvas((ctx, w, h) => {
-        ctx.fillStyle = bg; ctx.fillRect(0,0,w,h); ctx.fillStyle = textColor; ctx.font = 'bold 24px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(text, w/2, h/2);
-    }, 128, 64);
-    return texCache[key];
-};
-export const getSignMaterial = (key: string, bgColor: string, text: string): THREE.MeshStandardMaterial => {
-    const tex = getTextSignTexture(text, bgColor); return new THREE.MeshStandardMaterial({ map: tex });
-};
-export const getCommercialSignTexture = (type: 'pizza' | 'coffee', bgColor: string): THREE.Texture => {
-    const key = `com_${type}_${bgColor}`;
-    if (texCache[key]) return texCache[key];
-    texCache[key] = createTextureFromCanvas((ctx, w, h) => {
-        ctx.fillStyle = bgColor; ctx.fillRect(0,0,w,h); ctx.fillStyle = '#ffffff'; ctx.font = 'bold 30px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(type === 'pizza' ? 'PIZZA' : 'CAFE', w/2, h/2);
-    });
-    return texCache[key];
-};
-export const getAdvertisementTexture = (variant: number): THREE.Texture => {
-    const key = `ad_${variant}`;
-    if (texCache[key]) return texCache[key];
-    texCache[key] = createTextureFromCanvas((ctx, w, h) => {
-        ctx.fillStyle = variant === 0 ? '#ffeb3b' : '#03a9f4'; ctx.fillRect(0,0,w,h); ctx.fillStyle = '#000000'; ctx.font = 'bold 20px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('SALE', w/2, h/2);
-    });
-    return texCache[key];
-};
-export const getCarrefourSignTexture = (): THREE.Texture => {
-    const key = 'carrefour_logo';
-    if (texCache[key]) return texCache[key];
-    texCache[key] = createTextureFromCanvas((ctx, w, h) => {
-        ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,w,h); ctx.fillStyle = '#1e88e5'; ctx.beginPath(); ctx.moveTo(10, h/2); ctx.lineTo(w/2, 10); ctx.lineTo(w/2, h-10); ctx.fill(); ctx.fillStyle = '#e53935'; ctx.beginPath(); ctx.moveTo(w-10, h/2); ctx.lineTo(w/2, 10); ctx.lineTo(w/2, h-10); ctx.fill();
-    });
-    return texCache[key];
-};
-export const getIndustrialSignTexture = (type: IndSignType, bgColor: string): THREE.Texture => {
-    const key = `ind_${type}_${bgColor}`;
-    if (texCache[key]) return texCache[key];
-    texCache[key] = createTextureFromCanvas((ctx, w, h) => {
-        ctx.fillStyle = bgColor; ctx.fillRect(0,0,w,h); ctx.fillStyle = '#ffffff'; ctx.font = 'bold 20px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        let symbol = '';
-        switch(type) {
-            case 'gear': symbol = '⚙️'; break;
-            case 'hammer': symbol = '🔨'; break;
-            case 'chair': symbol = '🪑'; break;
-            case 'spool': symbol = '🧵'; break;
-            case 'chip': symbol = '💾'; break;
-            case 'leaf': symbol = '🍃'; break;
-            case 'cloud': symbol = '☁️'; break;
-            case 'box': symbol = '📦'; break;
-            case 'rocket': symbol = '🚀'; break;
-            case 'dna': symbol = '🧬'; break;
+// --- TEXTURE GENERATORS ---
+
+export const getTextSignTexture = (text: string, bgColor: string = '#ffffff', textColor: string = '#000000'): THREE.Texture => {
+    return createTextureFromCanvas((ctx, w, h) => {
+        // Clear background
+        if (bgColor === 'transparent') {
+            ctx.clearRect(0, 0, w, h);
+        } else {
+            ctx.fillStyle = bgColor;
+            ctx.fillRect(0, 0, w, h);
         }
-        ctx.fillText(symbol, w/2, h/2);
+        
+        ctx.fillStyle = textColor;
+        // Adjust font size based on text length
+        const fontSize = Math.min(24, Math.floor(w / text.length * 1.5));
+        ctx.font = `bold ${fontSize}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, w/2, h/2);
     });
-    return texCache[key];
 };
-export const getCocaColaLogoTexture = (): THREE.Texture => {
-    const key = 'coca_logo';
-    if (texCache[key]) return texCache[key];
-    texCache[key] = createTextureFromCanvas((ctx, w, h) => {
-        ctx.fillStyle = '#f40009'; ctx.fillRect(0,0,w,h); ctx.fillStyle = '#ffffff'; ctx.font = 'italic bold 20px Serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('Coca-Cola', w/2, h/2);
-    }, 128, 64);
-    return texCache[key];
+
+export type IndSignType = 'gear' | 'hammer' | 'chair' | 'spool' | 'chip' | 'leaf' | 'cloud' | 'box' | 'rocket' | 'dna';
+
+export const getIndustrialSignTexture = (type: IndSignType, bgColor: string): THREE.Texture => {
+    return createTextureFromCanvas((ctx, w, h) => {
+        ctx.fillStyle = bgColor;
+        ctx.fillRect(0, 0, w, h);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '32px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        let emoji = '🏭';
+        switch(type) {
+            case 'gear': emoji = '⚙️'; break;
+            case 'hammer': emoji = '🔨'; break;
+            case 'chair': emoji = '🪑'; break;
+            case 'spool': emoji = '🧵'; break;
+            case 'chip': emoji = '💾'; break;
+            case 'leaf': emoji = '🍃'; break;
+            case 'cloud': emoji = '☁️'; break;
+            case 'box': emoji = '📦'; break;
+            case 'rocket': emoji = '🚀'; break;
+            case 'dna': emoji = '🧬'; break;
+        }
+        ctx.fillText(emoji, w/2, h/2);
+    });
 };
-export const getNikeLogoTexture = (): THREE.Texture => {
-    const key = 'nike_logo';
-    if (texCache[key]) return texCache[key];
-    texCache[key] = createTextureFromCanvas((ctx, w, h) => {
-        ctx.fillStyle = '#000000'; ctx.fillRect(0,0,w,h); ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(10, h/2); ctx.quadraticCurveTo(w/2, h, w-10, 10); ctx.stroke();
-    }, 128, 64);
-    return texCache[key];
+
+export const getCommercialSignTexture = (type: 'pizza' | 'coffee', bgColor: string): THREE.Texture => {
+    return createTextureFromCanvas((ctx, w, h) => {
+        ctx.fillStyle = bgColor;
+        ctx.fillRect(0, 0, w, h);
+        ctx.font = '32px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(type === 'pizza' ? '🍕' : '☕', w/2, h/2);
+    });
 };
-export const getAppleLogoTexture = (): THREE.Texture => {
-    const key = 'apple_logo';
-    if (texCache[key]) return texCache[key];
-    texCache[key] = createTextureFromCanvas((ctx, w, h) => {
-        ctx.fillStyle = '#c0c0c0'; ctx.fillRect(0,0,w,h); ctx.fillStyle = '#ffffff'; ctx.font = '40px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('', w/2, h/2);
-    }, 64, 64);
-    return texCache[key];
+
+export const getAdvertisementTexture = (variant: number): THREE.Texture => {
+    return createTextureFromCanvas((ctx, w, h) => {
+        ctx.fillStyle = variant === 0 ? '#ffeb3b' : '#29b6f6';
+        ctx.fillRect(0, 0, w, h);
+        ctx.fillStyle = '#000000';
+        ctx.font = 'bold 16px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(variant === 0 ? 'PROMO' : 'NEW', w/2, h/2);
+    });
 };
-export const getFordLogoTexture = (): THREE.Texture => {
-    const key = 'ford_logo';
-    if (texCache[key]) return texCache[key];
-    texCache[key] = createTextureFromCanvas((ctx, w, h) => {
-        ctx.fillStyle = '#1e88e5'; ctx.beginPath(); ctx.ellipse(w/2, h/2, w/2-5, h/2-10, 0, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle = '#ffffff'; ctx.stroke(); ctx.fillStyle = '#ffffff'; ctx.font = 'italic bold 20px Serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('Ford', w/2, h/2);
-    }, 128, 64);
-    return texCache[key];
+
+export const getCarrefourSignTexture = (): THREE.Texture => {
+    return createTextureFromCanvas((ctx, w, h) => {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, w, h);
+        // C logo simplified
+        ctx.fillStyle = '#1e88e5'; // Blue
+        ctx.beginPath();
+        ctx.moveTo(w*0.3, h*0.2); ctx.lineTo(w*0.5, h*0.2); ctx.lineTo(w*0.5, h*0.8); ctx.lineTo(w*0.3, h*0.8);
+        ctx.fill();
+        ctx.fillStyle = '#e53935'; // Red
+        ctx.beginPath();
+        ctx.moveTo(w*0.7, h*0.2); ctx.lineTo(w*0.5, h*0.2); ctx.lineTo(w*0.5, h*0.8); ctx.lineTo(w*0.7, h*0.8);
+        ctx.fill();
+    });
 };
-export const getNVidiaLogoTexture = (): THREE.Texture => {
-    const key = 'nvidia_logo';
-    if (texCache[key]) return texCache[key];
-    texCache[key] = createTextureFromCanvas((ctx, w, h) => {
-        ctx.fillStyle = '#000000'; ctx.fillRect(0,0,w,h); ctx.fillStyle = '#76b900'; ctx.font = 'bold 20px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('NVIDIA', w/2, h/2);
-    }, 128, 64);
-    return texCache[key];
+
+export const getCocaColaLogoTexture = (): THREE.Texture => getTextSignTexture('Coca-Cola', '#f40009', '#ffffff');
+export const getNikeLogoTexture = (): THREE.Texture => getTextSignTexture('NIKE', '#000000', '#ffffff');
+export const getAppleLogoTexture = (): THREE.Texture => getTextSignTexture('', '#f5f5f5', '#000000');
+export const getFordLogoTexture = (): THREE.Texture => getTextSignTexture('Ford', '#1976d2', '#ffffff');
+export const getNVidiaLogoTexture = (): THREE.Texture => getTextSignTexture('NVIDIA', '#76b900', '#ffffff');
+
+export const getSignMaterial = (id: string, bgColor: string, text: string): THREE.MeshStandardMaterial => {
+    const tex = getTextSignTexture(text, bgColor, '#ffffff');
+    return new THREE.MeshStandardMaterial({ map: tex });
 };
-export const getStadiumLedTexture = (): THREE.Texture => {
-    const key = 'stadium_led';
-    if (texCache[key]) return texCache[key];
-    texCache[key] = createTextureFromCanvas((ctx, w, h) => {
-        ctx.fillStyle = '#000000'; ctx.fillRect(0,0,w,h); ctx.fillStyle = '#ff0000'; ctx.font = 'bold 20px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('GOAL!!!', w/2, h/2);
-    }, 256, 64);
-    return texCache[key];
-};
+
+export const getStadiumLedTexture = (): THREE.Texture => getTextSignTexture('GOAL!', '#000000', '#ffffff');
+
 export const getSoccerFieldTexture = (): THREE.Texture => {
-    const key = 'soccer_field';
-    if (texCache[key]) return texCache[key];
-    texCache[key] = createTextureFromCanvas((ctx, w, h) => {
-        ctx.fillStyle = '#2e7d32'; ctx.fillRect(0,0,w,h); ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.strokeRect(10, 10, w-20, h-20); ctx.beginPath(); ctx.moveTo(w/2, 10); ctx.lineTo(w/2, h-10); ctx.stroke(); ctx.beginPath(); ctx.arc(w/2, h/2, 20, 0, Math.PI*2); ctx.stroke();
-    }, 256, 128);
-    return texCache[key];
+    return createTextureFromCanvas((ctx, w, h) => {
+        ctx.fillStyle = '#4caf50';
+        ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(5, 5, w-10, h-10);
+        ctx.beginPath(); ctx.moveTo(w/2, 5); ctx.lineTo(w/2, h-5); ctx.stroke();
+        ctx.beginPath(); ctx.arc(w/2, h/2, 10, 0, Math.PI*2); ctx.stroke();
+    });
 };
+
 export const getHighQualityGlassMaterial = (color: number, isNight: boolean): THREE.MeshPhysicalMaterial => {
     return new THREE.MeshPhysicalMaterial({
-        color: color, metalness: 0.1, roughness: 0.05, transmission: 0.6, transparent: true, opacity: 0.7, emissive: isNight ? color : 0x000000, emissiveIntensity: isNight ? 0.3 : 0
+        color: color,
+        transmission: 0.6,
+        opacity: 0.6,
+        transparent: true,
+        roughness: 0.2,
+        metalness: 0.1,
+        emissive: isNight ? color : 0x000000,
+        emissiveIntensity: isNight ? 0.3 : 0
     });
 };
-export const getCorinthiansLogoTexture = (): THREE.Texture => {
-    const key = 'corinthians_logo';
-    if (texCache[key]) return texCache[key];
-    texCache[key] = createTextureFromCanvas((ctx, w, h) => {
-        ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(w/2, h/2, h/2-2, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle = '#000000'; ctx.lineWidth = 2; ctx.stroke(); ctx.fillStyle = '#000000'; ctx.font = 'bold 16px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('SCCP', w/2, h/2);
-    }, 64, 64);
-    return texCache[key];
-};
-export const getAvengersLogoTexture = (): THREE.Texture => {
-    const key = 'avengers_logo';
-    if (texCache[key]) return texCache[key];
-    texCache[key] = createTextureFromCanvas((ctx, w, h) => {
-        ctx.clearRect(0,0,w,h); ctx.fillStyle = '#00e5ff'; ctx.font = 'bold 60px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('A', w/2, h/2);
-    }, 64, 64);
-    return texCache[key];
-};
-export const getNASALogoTexture = (): THREE.Texture => {
-    const key = 'nasa_logo';
-    if (texCache[key]) return texCache[key];
-    texCache[key] = createTextureFromCanvas((ctx, w, h) => {
-        ctx.fillStyle = '#0b3d91'; ctx.beginPath(); ctx.arc(w/2, h/2, h/2-2, 0, Math.PI*2); ctx.fill(); ctx.fillStyle = '#fc3d21'; ctx.font = 'bold 20px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#ffffff'; ctx.fillText('NASA', w/2, h/2);
-    }, 64, 64);
-    return texCache[key];
-};
+
+export const getCorinthiansLogoTexture = (): THREE.Texture => getTextSignTexture('CP', '#ffffff', '#000000');
+export const getAvengersLogoTexture = (): THREE.Texture => getTextSignTexture('A', 'transparent', '#00e5ff');
+export const getNASALogoTexture = (): THREE.Texture => getTextSignTexture('NASA', '#0b3d91', '#fc3d21');
 export const getUSAFlagTexture = (): THREE.Texture => {
-    const key = 'usa_flag';
-    if (texCache[key]) return texCache[key];
-    texCache[key] = createTextureFromCanvas((ctx, w, h) => {
-        ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,w,h); ctx.fillStyle = '#b22234'; for(let i=0; i<13; i+=2) { ctx.fillRect(0, i*(h/13), w, h/13); } ctx.fillStyle = '#3c3b6e'; ctx.fillRect(0,0, w*0.4, h*(7/13)); ctx.fillStyle = '#ffffff'; ctx.fillText('★', w*0.2, h*0.25);
-    }, 64, 40);
-    return texCache[key];
+    return createTextureFromCanvas((ctx, w, h) => {
+        ctx.fillStyle = '#b22234';
+        ctx.fillRect(0,0,w,h);
+        ctx.fillStyle = '#ffffff';
+        for(let i=0; i<13; i+=2) ctx.fillRect(0, i*(h/13), w, h/13);
+        ctx.fillStyle = '#3c3b6e';
+        ctx.fillRect(0,0,w*0.4, h*0.54);
+    });
 };
