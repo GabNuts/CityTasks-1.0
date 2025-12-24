@@ -193,7 +193,6 @@ export const createRoad = (group: THREE.Group, x: number, z: number, neighbors: 
     const roadWidth = 1.3;
     const sidewalkColor = 0x9e9e9e; 
     const asphaltColor = 0x555555;
-    // Bugfix: Dim the marking color at night so it doesn't look "lit"
     const markingColor = isNight ? 0x333333 : 0xffffff;
 
     group.add(createBox(tileSize, 0.1, tileSize, sidewalkColor, x*2, 0.05, z*2, isNight));
@@ -314,11 +313,10 @@ export const createRoad = (group: THREE.Group, x: number, z: number, neighbors: 
                     flag.rotation.y = -angle + Math.PI/2;
                     group.add(flag);
                 } else if (activeEvent === 'independence') {
-                    // Bugfix: Remove "lit" effect at night by manually dimming the flag colors
                     let color = i % 2 !== 0 ? 0x4caf50 : 0xffeb3b; 
                     if (isNight) {
                         const c = new THREE.Color(color);
-                        c.multiplyScalar(0.2); // Escurece em 80% para simular falta de luz
+                        c.multiplyScalar(0.2); 
                         color = c.getHex();
                     }
                     const flag = createBox(0.25, 0.15, 0.02, color, lx, stringHeight - 0.08, lz, isNight, true);
