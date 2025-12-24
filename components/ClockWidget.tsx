@@ -102,6 +102,8 @@ const ClockWidget: React.FC<ClockWidgetProps> = ({ gameCreatedAt }) => {
   
   // Audio Playback State
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const synthIntervalRef = useRef<number | null>(null); // Ref para o loop do sintetizador
+  
   const [activeAlarmId, setActiveAlarmId] = useState<string | null>(null);
   const [currentVolume, setCurrentVolume] = useState(1);
   const gradualIntervalRef = useRef<number | null>(null);
@@ -204,6 +206,55 @@ const ClockWidget: React.FC<ClockWidgetProps> = ({ gameCreatedAt }) => {
     return () => clearInterval(interval);
   }, [alarms]);
 
+  // --- AUDIO SYNTHESIZER ---
+  const playBeep = (freq = 880, type: OscillatorType = 'square', duration = 0.1) => {
+      try {
+          const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+          const ctx = new AudioContextClass();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          
+          osc.type = type;
+          osc.frequency.value = freq;
+          
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          
+          const now = ctx.currentTime;
+          osc.start(now);
+          gain.gain.setValueAtTime(0.1, now); 
+          gain.gain.exponentialRampToValueAtTime(0.00001, now + duration);
+          osc.stop(now + duration);
+      } catch (e) {
+          console.error("Audio Context Error", e);
+      }
+  };
+
+  const startSynthLoop = (type: 'alarm' | 'timer') => {
+      if (synthIntervalRef.current) clearInterval(synthIntervalRef.current);
+      
+      const pattern = () => {
+          if (type === 'alarm') {
+              // Digital Watch Alarm Pattern: Beep-Beep ... Beep-Beep
+              playBeep(880, 'square', 0.1);
+              setTimeout(() => playBeep(880, 'square', 0.1), 150);
+          } else {
+              // Timer Pattern: Beep ... Beep
+              playBeep(1000, 'sine', 0.3);
+          }
+      };
+
+      pattern(); // Play immediately
+      synthIntervalRef.current = window.setInterval(pattern, 1000);
+  };
+
+  const stopSynthLoop = () => {
+      if (synthIntervalRef.current) {
+          clearInterval(synthIntervalRef.current);
+          synthIntervalRef.current = null;
+      }
+  };
+
   // --- ALARM LOGIC ---
 
   const triggerAlarm = async (alarm: Alarm) => {
@@ -217,50 +268,50 @@ const ClockWidget: React.FC<ClockWidgetProps> = ({ gameCreatedAt }) => {
           audioRef.current.pause();
           audioRef.current.src = "";
       }
+      stopSynthLoop();
 
-      // SOM PADRÃO SE NÃO TIVER CUSTOMIZADO
-      let audioSrc = "https://actions.google.com/sounds/v1/alarms/digital_watch.ogg"; 
-      
       if (alarm.hasCustomAudio) {
           try {
               const blob = await getAudioBlob(alarm.id);
               if (blob) {
-                  audioSrc = URL.createObjectURL(blob);
+                  const audioSrc = URL.createObjectURL(blob);
+                  const audio = new Audio(audioSrc);
+                  audio.loop = true;
+                  audioRef.current = audio;
+                  
+                  if (alarm.gradualWakeup) {
+                      audio.volume = 0; 
+                      audio.play().catch(e => console.log("Autoplay blocked", e));
+                      
+                      const durationSeconds = Math.max(5, Math.min(30, alarm.gradualDuration));
+                      let currentSecond = 0;
+                      
+                      if (gradualIntervalRef.current) clearInterval(gradualIntervalRef.current);
+                      
+                      gradualIntervalRef.current = window.setInterval(() => {
+                          currentSecond++;
+                          const newVol = Math.min(1, currentSecond / durationSeconds);
+                          if (audioRef.current) audioRef.current.volume = newVol;
+                          setCurrentVolume(newVol);
+                          if (currentSecond >= durationSeconds) {
+                              if (gradualIntervalRef.current) clearInterval(gradualIntervalRef.current);
+                          }
+                      }, 1000);
+                  } else {
+                      audio.volume = 1;
+                      audio.play().catch(e => console.log("Autoplay blocked", e));
+                  }
+              } else {
+                  // Fallback to synth if blob lost
+                  startSynthLoop('alarm');
               }
           } catch (e) {
               console.error("Error loading custom audio, using default", e);
+              startSynthLoop('alarm');
           }
-      }
-
-      const audio = new Audio(audioSrc);
-      audio.loop = true;
-      audioRef.current = audio;
-
-      if (alarm.gradualWakeup) {
-          audio.volume = 0; 
-          audio.play().catch(e => console.log("Autoplay blocked", e));
-          
-          const durationSeconds = Math.max(5, Math.min(30, alarm.gradualDuration));
-          let currentSecond = 0;
-          
-          // Limpa intervalo anterior se houver
-          if (gradualIntervalRef.current) clearInterval(gradualIntervalRef.current);
-          
-          // Sobe o volume a cada 1 segundo (sobe de "1 em 1" na escala proporcional)
-          gradualIntervalRef.current = window.setInterval(() => {
-              currentSecond++;
-              const newVol = Math.min(1, currentSecond / durationSeconds);
-              
-              if (audioRef.current) audioRef.current.volume = newVol;
-              setCurrentVolume(newVol);
-              
-              if (currentSecond >= durationSeconds) {
-                  if (gradualIntervalRef.current) clearInterval(gradualIntervalRef.current);
-              }
-          }, 1000);
       } else {
-          audio.volume = 1;
-          audio.play().catch(e => console.log("Autoplay blocked", e));
+          // DEFAULT SOUND: SYNTHESIZED
+          startSynthLoop('alarm');
       }
   };
 
@@ -269,6 +320,7 @@ const ClockWidget: React.FC<ClockWidgetProps> = ({ gameCreatedAt }) => {
           audioRef.current.pause();
           audioRef.current.src = ""; 
       }
+      stopSynthLoop();
       if (gradualIntervalRef.current) clearInterval(gradualIntervalRef.current);
       setActiveAlarmId(null);
   };
@@ -348,11 +400,10 @@ const ClockWidget: React.FC<ClockWidgetProps> = ({ gameCreatedAt }) => {
             audioRef.current.pause();
             audioRef.current.src = "";
         }
-        // Som padrão de alarme para o timer
-        const audio = new Audio("https://actions.google.com/sounds/v1/alarms/beep_short.ogg");
-        audio.loop = true;
-        audioRef.current = audio;
-        audio.play().catch(e => console.log("Timer audio blocked", e));
+        stopSynthLoop();
+        
+        // Use synthesized beep for timer
+        startSynthLoop('timer');
 
     } else if (!timerRunning && timerRef.current) {
         clearInterval(timerRef.current);
@@ -366,6 +417,7 @@ const ClockWidget: React.FC<ClockWidgetProps> = ({ gameCreatedAt }) => {
           audioRef.current.pause();
           audioRef.current.src = "";
       }
+      stopSynthLoop();
   };
 
   const formatStopwatch = (ms: number) => {

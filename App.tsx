@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import TaskList from './components/TaskList';
 import CityDisplay from './components/CityDisplay';
@@ -174,6 +175,7 @@ export default function App() {
   const [stats, setStats] = useState<CityStats>(INITIAL_STATS);
   const [gameState, setGameState] = useState<GameState>(INITIAL_GAME_STATE);
   const [buildings, setBuildings] = useState<Building[]>([]);
+  const [availableTags, setAvailableTags] = useState<string[]>([]); // New State for Tags
   
   // Placement Mode State
   const [placementMode, setPlacementMode] = useState<{ active: boolean, landmarkId: string | null }>({ active: false, landmarkId: null });
@@ -246,12 +248,13 @@ export default function App() {
   useEffect(() => {
     // LOAD GAME
     const savedData = localStorage.getItem('citytask_save_v1');
-    const todayGameDate = getGameDateString(); // <--- Changed: Uses Virtual Day (Start 7 AM)
+    const todayGameDate = getGameDateString(); 
 
     if (savedData) {
       try {
         const parsed = JSON.parse(savedData);
         if (parsed.tasks) setTasks(parsed.tasks);
+        if (parsed.availableTags) setAvailableTags(parsed.availableTags); // Load Tags
         
         let loadedStats = parsed.stats || INITIAL_STATS;
         if (!loadedStats.lastLoginDate) loadedStats.lastLoginDate = todayGameDate; 
@@ -294,7 +297,7 @@ export default function App() {
                     loadedGameState.unlockedVehicles.push(wonCar.id);
                     setTimeout(() => {
                         showToast("🚗 EVENTO RARO!", `Um veículo lendário apareceu na cidade: ${wonCar.name}!`, "success");
-                    }, 2000); // Delay para aparecer após o carregamento inicial
+                    }, 2000); 
                 }
             }
         }
@@ -329,11 +332,12 @@ export default function App() {
         tasks,
         stats,
         buildings,
-        gameState
+        gameState,
+        availableTags
       };
       localStorage.setItem('citytask_save_v1', JSON.stringify(dataToSave));
     }
-  }, [tasks, stats, buildings, gameState, isLoaded]);
+  }, [tasks, stats, buildings, gameState, isLoaded, availableTags]);
 
   // --- SAVE BACKUP MANAGEMENT ---
   const handleExportSave = () => {
@@ -358,7 +362,6 @@ export default function App() {
       if (!file) return;
       setPendingImportFile(file);
       setIsImportModalOpen(true);
-      // Reset input value to allow selecting same file again if needed
       e.target.value = '';
   };
 
@@ -368,7 +371,6 @@ export default function App() {
       reader.onload = (ev) => {
         try {
           const json = ev.target?.result as string;
-          // Basic validation
           const parsed = JSON.parse(json);
           if (parsed && parsed.stats && parsed.buildings) {
               localStorage.setItem('citytask_save_v1', json);
@@ -452,615 +454,362 @@ export default function App() {
   };
 
   const findGridSpot = (width: number, depth: number, candidateType: BuildingType, currentList: Building[]) => {
-    let bx = 0; let bz = 0; let dx = 0; let dz = -1;
-    let t = Math.max(Math.abs(bx), Math.abs(bz));
-    
-    const maxIter = 1000; 
+    let x = 0;
+    let y = 0;
+    let d = 1;
+    let m = 1;
 
-    for (let i = 0; i < maxIter; i++) {
-        const originX = bx * BLOCK_SIZE;
-        const originZ = bz * BLOCK_SIZE;
-        
-        const buildingsInBlock = currentList.filter(b => 
-            b.x > originX && b.x < originX + BLOCK_SIZE &&
-            b.z > originZ && b.z < originZ + BLOCK_SIZE &&
-            b.type !== 'road'
-        );
+    for (let i = 0; i < 500; i++) {
+        // Spiral square search
+        while (2 * x * d < m) {
+            // Check block (x, y)
+            const originX = x * BLOCK_SIZE;
+            const originZ = y * BLOCK_SIZE;
+            
+            const buildingsInBlock = currentList.filter(b => 
+                b.x >= originX && b.x < originX + BLOCK_SIZE &&
+                b.z >= originZ && b.z < originZ + BLOCK_SIZE &&
+                b.type !== 'road'
+            );
 
-        let isCompatible = true;
-        if (buildingsInBlock.length > 0) {
-            const hasRes = buildingsInBlock.some(b => b.type === 'res');
-            const hasPark = buildingsInBlock.some(b => b.type === 'park');
-            const hasCom = buildingsInBlock.some(b => b.type === 'com');
-            const hasInd = buildingsInBlock.some(b => b.type === 'ind');
+            let isCompatible = true;
+            if (buildingsInBlock.length > 0) {
+                const hasRes = buildingsInBlock.some(b => b.type === 'res');
+                const hasPark = buildingsInBlock.some(b => b.type === 'park');
+                const hasCom = buildingsInBlock.some(b => b.type === 'com');
+                const hasInd = buildingsInBlock.some(b => b.type === 'ind');
 
-            if (candidateType === 'res' || candidateType === 'park') {
-                if (hasCom || hasInd) isCompatible = false;
-            }
-            else if (candidateType === 'com') {
-                if (hasRes || hasPark || hasInd) isCompatible = false;
-            }
-            else if (candidateType === 'ind') {
-                if (hasRes || hasPark || hasCom) isCompatible = false;
-            }
-        }
-
-        if (isCompatible) {
-            const zoneX = originX + 1;
-            const zoneZ = originZ + 1;
-            const zoneW = 2;
-            const zoneH = 2;
-
-            const candidates = [];
-            for (let oz = 0; oz < zoneH; oz++) {
-                for (let ox = 0; ox < zoneW; ox++) {
-                    candidates.push({x: zoneX + ox, z: zoneZ + oz});
+                if (candidateType === 'res' || candidateType === 'park') {
+                    if (hasCom || hasInd) isCompatible = false;
+                }
+                else if (candidateType === 'com') {
+                    if (hasRes || hasPark || hasInd) isCompatible = false;
+                }
+                else if (candidateType === 'ind') {
+                    if (hasRes || hasPark || hasCom) isCompatible = false;
                 }
             }
-            
-            for (let j = candidates.length - 1; j > 0; j--) {
-                const k = Math.floor(Math.random() * (j + 1));
-                [candidates[j], candidates[k]] = [candidates[k], candidates[j]];
-            }
 
-            for (const pos of candidates) {
-                if (pos.x >= zoneX && pos.x + width <= zoneX + zoneW &&
-                    pos.z >= zoneZ && pos.z + depth <= zoneZ + zoneH) {
-                    if (!checkCollisionFast(pos.x, pos.z, width, depth, 0)) {
-                        const smartRot = getSmartRotation(pos.x, pos.z, width, depth);
-                        if (smartRot === 0 || smartRot === 2) {
-                            return { x: pos.x, z: pos.z, rotation: smartRot, blockOriginX: originX, blockOriginZ: originZ };
+            if (isCompatible) {
+                for(let lx = 1; lx < BLOCK_SIZE; lx++) {
+                    for(let lz = 1; lz < BLOCK_SIZE; lz++) {
+                        const testX = originX + lx;
+                        const testZ = originZ + lz;
+                        const rot = getSmartRotation(testX, testZ, width, depth);
+                        if (!checkCollisionFast(testX, testZ, width, depth, rot)) {
+                            return { x: testX, z: testZ, rotation: rot, bx: x, bz: y };
                         }
                     }
                 }
+            }
 
-                if (pos.x >= zoneX && pos.x + depth <= zoneX + zoneW &&
-                    pos.z >= zoneZ && pos.z + width <= zoneZ + zoneH) {
-                    if (!checkCollisionFast(pos.x, pos.z, width, depth, 1)) {
-                         const isRoad = (tx:number, tz:number) => roadTilesRef.current.has(`${tx},${tz}`);
-                         for(let k=0; k<width; k++) if(isRoad(pos.x-1, pos.z+k)) {
-                             return { x: pos.x, z: pos.z, rotation: 1, blockOriginX: originX, blockOriginZ: originZ };
-                         }
-                         for(let k=0; k<width; k++) if(isRoad(pos.x+depth, pos.z+k)) {
-                             return { x: pos.x, z: pos.z, rotation: 3, blockOriginX: originX, blockOriginZ: originZ };
-                         }
-                         return { x: pos.x, z: pos.z, rotation: 1, blockOriginX: originX, blockOriginZ: originZ };
+            x = x + d;
+        }
+        while (2 * y * d < m) {
+            // Check block (x, y) - Same Logic
+            const originX = x * BLOCK_SIZE;
+            const originZ = y * BLOCK_SIZE;
+            
+            const buildingsInBlock = currentList.filter(b => 
+                b.x >= originX && b.x < originX + BLOCK_SIZE &&
+                b.z >= originZ && b.z < originZ + BLOCK_SIZE &&
+                b.type !== 'road'
+            );
+
+            let isCompatible = true;
+            if (buildingsInBlock.length > 0) {
+                const hasRes = buildingsInBlock.some(b => b.type === 'res');
+                const hasPark = buildingsInBlock.some(b => b.type === 'park');
+                const hasCom = buildingsInBlock.some(b => b.type === 'com');
+                const hasInd = buildingsInBlock.some(b => b.type === 'ind');
+
+                if (candidateType === 'res' || candidateType === 'park') {
+                    if (hasCom || hasInd) isCompatible = false;
+                }
+                else if (candidateType === 'com') {
+                    if (hasRes || hasPark || hasInd) isCompatible = false;
+                }
+                else if (candidateType === 'ind') {
+                    if (hasRes || hasPark || hasCom) isCompatible = false;
+                }
+            }
+
+            if (isCompatible) {
+                for(let lx = 1; lx < BLOCK_SIZE; lx++) {
+                    for(let lz = 1; lz < BLOCK_SIZE; lz++) {
+                        const testX = originX + lx;
+                        const testZ = originZ + lz;
+                        const rot = getSmartRotation(testX, testZ, width, depth);
+                        if (!checkCollisionFast(testX, testZ, width, depth, rot)) {
+                            return { x: testX, z: testZ, rotation: rot, bx: x, bz: y };
+                        }
                     }
                 }
             }
-        }
 
-        if ((bx === bz) || ((bx < 0) && (bx === -bz)) || ((bx > 0) && (bx === 1 - bz))) {
-            t = dx; dx = -dz; dz = t;
+            y = y + d;
         }
-        bx += dx; bz += dz;
+        d = -1 * d;
+        m = m + 1;
     }
     return null;
   };
 
-  const generateBuildingData = (type: BuildingType, currentPopulation: number): { level: 1|2|3, style: string, variant: 0|1, isRare: boolean, w: number, d: number } => {
-    if (type === 'road') return { level: 1, style: 'road', variant: 0, isRare: false, w: 1, d: 1 };
-    if (type === 'landmark') return { level: 3, style: 'unknown', variant: 0, isRare: true, w: 4, d: 4 };
+  // --- HANDLERS ---
 
-    if (type === 'gov') {
-        // @ts-ignore
-        const govBuildings = BUILDING_CATALOG.gov[1];
-        const selected = govBuildings[Math.floor(Math.random() * govBuildings.length)];
-        const roll = Math.random();
-        let isRare = false; let variant: 0 | 1 = 0;
-        if (roll < 0.01) { isRare = true; variant = Math.random() > 0.5 ? 1 : 0; } 
-        else if (roll < 0.31) { variant = 1; }
-        return { level: 1, style: selected.id, variant, isRare, w: selected.w, d: selected.d };
-    }
+  const handleAddTask = (taskData: any) => {
+      const newTask = { ...taskData, id: generateId(), completed: false, createdAt: Date.now() };
+      setTasks(prev => [...prev, newTask]);
+      showToast("Nova Tarefa", "Tarefa adicionada com sucesso!", "success");
+  };
 
-    let maxLevel = 1;
-    if (currentPopulation >= 25000) maxLevel = 3;
-    else if (currentPopulation >= 10000) maxLevel = 2;
+  const handleEditTask = (updatedTask: Task) => {
+      setTasks(prev => prev.map(t => t.id === updatedTask.id ? updatedTask : t));
+      showToast("Tarefa Atualizada", "Alterações salvas!", "success");
+  };
 
-    const level = Math.ceil(Math.random() * maxLevel) as 1 | 2 | 3;
-    const catalogType = BUILDING_CATALOG[type as keyof typeof BUILDING_CATALOG];
-    // @ts-ignore
-    const levelBuildings = catalogType[level] || catalogType[1];
-    
-    if (!levelBuildings || levelBuildings.length === 0) {
-         const fallback = BUILDING_CATALOG[type as keyof typeof BUILDING_CATALOG][1];
-         const selected = fallback[Math.floor(Math.random() * fallback.length)];
-         return { level: 1, style: selected.id, variant: 0, isRare: false, w: selected.w, d: selected.d };
-    }
+  const handleReorderTasks = (newOrder: Task[]) => {
+      setTasks(newOrder);
+  };
 
-    const selectedBuilding = levelBuildings[Math.floor(Math.random() * levelBuildings.length)];
-    const variant = Math.random() > 0.5 ? 1 : 0;
-    const isRare = Math.random() < 0.001;
+  const handleCompleteTask = (id: string) => {
+      setTasks(prev => prev.map(t => {
+          if (t.id === id) {
+              const newStatus = !t.completed;
+              if (newStatus) {
+                  // Reward logic
+                  let reward = 100;
+                  if (t.difficulty === TaskDifficulty.MEDIUM) reward = 250;
+                  if (t.difficulty === TaskDifficulty.HARD) reward = 500;
+                  
+                  // Update stats
+                  setStats(s => ({
+                      ...s,
+                      budget: s.budget + reward,
+                      population: s.population + Math.floor(reward / 10)
+                  }));
 
-    return { level, style: selectedBuilding.id, variant, isRare, w: selectedBuilding.w, d: selectedBuilding.d };
+                  // Chance to build
+                  if (Math.random() < 0.4) {
+                      handleDebugGenerate(); // Reuse generator logic
+                  }
+                  
+                  showToast("Tarefa Concluída", `+${reward} moedas!`, "success");
+              }
+              return { ...t, completed: newStatus };
+          }
+          return t;
+      }));
+  };
+
+  const handleDeleteTask = (id: string) => {
+      setTasks(prev => prev.filter(t => t.id !== id));
+  };
+
+  const handleToggleSubtask = (taskId: string, subtaskId: string) => {
+      setTasks(prev => prev.map(t => {
+          if (t.id === taskId) {
+              return {
+                  ...t,
+                  subtasks: t.subtasks.map(st => st.id === subtaskId ? { ...st, completed: !st.completed } : st)
+              };
+          }
+          return t;
+      }));
+  };
+
+  const handleDebugGenerate = () => {
+      const types: BuildingType[] = ['res', 'com', 'ind', 'park'];
+      const type = types[Math.floor(Math.random() * types.length)];
+      
+      const level = 1;
+      const catalog = BUILDING_CATALOG[type as keyof typeof BUILDING_CATALOG];
+      // @ts-ignore
+      const options = catalog[level];
+      if (!options) return;
+      
+      const model = options[Math.floor(Math.random() * options.length)];
+      
+      const spot = findGridSpot(model.w, model.d, type, buildings);
+      if (spot) {
+          const newBuildings = [...buildings];
+          ensureBlockRoads(spot.bx * BLOCK_SIZE, spot.bz * BLOCK_SIZE, newBuildings);
+          
+          const newB: Building = {
+              id: generateId(),
+              type: type,
+              x: spot.x,
+              z: spot.z,
+              rotation: spot.rotation,
+              width: model.w,
+              depth: model.d,
+              levelTier: 1,
+              style: model.id,
+              variant: Math.random() > 0.5 ? 1 : 0,
+              isRare: Math.random() < 0.05
+          };
+          newBuildings.push(newB);
+          
+          setBuildings(newBuildings);
+          markOccupied(spot.x, spot.z, model.w, model.d, spot.rotation, type);
+          
+          setStats(s => ({
+              ...s,
+              residentialCount: s.residentialCount + (type==='res'?1:0),
+              commercialCount: s.commercialCount + (type==='com'?1:0),
+              industrialCount: s.industrialCount + (type==='ind'?1:0),
+              parksCount: s.parksCount + (type==='park'?1:0),
+              govCount: s.govCount + (type==='gov'?1:0),
+          }));
+      }
   };
 
   const handleStartPlacement = (landmarkId: string) => {
-    setPlacementMode({ active: true, landmarkId });
+      setPlacementMode({ active: true, landmarkId });
   };
 
   const handleCancelPlacement = () => {
-    setPlacementMode({ active: false, landmarkId: null });
+      setPlacementMode({ active: false, landmarkId: null });
   };
 
   const handleConfirmPlacement = (x: number, z: number) => {
-    if (!placementMode.active || !placementMode.landmarkId) return;
+      if (!placementMode.landmarkId) return;
+      const item = LANDMARK_CATALOG.find(l => l.id === placementMode.landmarkId);
+      if (!item) return;
 
-    const landmarkDef = LANDMARK_CATALOG.find(l => l.id === placementMode.landmarkId);
-    if (!landmarkDef) return;
-
-    const smartRot = getSmartRotation(x, z, landmarkDef.w, landmarkDef.d);
-
-    const newBuilding: Building = {
-        id: generateId(),
-        type: 'landmark',
-        x: x,
-        z: z,
-        rotation: smartRot, 
-        width: landmarkDef.w,
-        depth: landmarkDef.d,
-        levelTier: 3,
-        style: landmarkDef.id,
-        landmarkId: landmarkDef.id,
-        variant: 0,
-        isRare: true
-    };
-
-    const newBuildingsList = buildings.filter(b => {
-        let bW = b.width; let bD = b.depth;
-        if(b.rotation % 2 !== 0) { bW = b.depth; bD = b.width; }
-        const collideX = (x < b.x + bW) && (x + landmarkDef.w > b.x);
-        const collideZ = (z < b.z + bD) && (z + landmarkDef.d > b.z);
-        if (collideX && collideZ) return false;
-        return true; 
-    });
-
-    const updatedWithLandmark = [...newBuildingsList, newBuilding];
-    
-    const effectiveW = smartRot % 2 !== 0 ? landmarkDef.d : landmarkDef.w;
-    const effectiveD = smartRot % 2 !== 0 ? landmarkDef.w : landmarkDef.d;
-    
-    const roadCandidates = [];
-    for (let px = x; px < x + effectiveW; px++) { roadCandidates.push({x: px, z: z - 1}); roadCandidates.push({x: px, z: z + effectiveD}); }
-    for (let pz = z; pz < z + effectiveD; pz++) { roadCandidates.push({x: x - 1, z: pz}); roadCandidates.push({x: x + effectiveW, z: pz}); }
-    
-    roadCandidates.forEach(cand => {
-        updatedWithLandmark.push({id: generateId(), type: 'road', x: cand.x, z: cand.z, rotation: 0, width: 1, depth: 1, levelTier: 1, style: 'road', variant: 0, isRare: false});
-    });
-
-    setBuildings(updatedWithLandmark);
-    
-    setGameState(prev => ({
-        ...prev,
-        unlockedLandmarks: [...prev.unlockedLandmarks, placementMode.landmarkId!],
-        landmarkInventory: prev.landmarkInventory.filter(id => id !== placementMode.landmarkId)
-    }));
-
-    setPlacementMode({ active: false, landmarkId: null });
+      const newB: Building = {
+          id: generateId(),
+          type: 'landmark',
+          x, z,
+          rotation: 0,
+          width: item.w,
+          depth: item.d,
+          levelTier: 3,
+          style: item.id,
+          variant: 0,
+          isRare: true,
+          landmarkId: item.id
+      };
+      
+      const newBuildings = [...buildings];
+      // Note: Landmarks might need roads around them, but for now we just place them.
+      
+      newBuildings.push(newB);
+      setBuildings(newBuildings);
+      markOccupied(x, z, item.w, item.d, 0, 'landmark');
+      
+      setGameState(prev => ({
+          ...prev,
+          landmarkInventory: prev.landmarkInventory.filter(id => id !== item.id),
+          unlockedLandmarks: [...prev.unlockedLandmarks, item.id]
+      }));
+      
+      setPlacementMode({ active: false, landmarkId: null });
+      showToast("Construção", `${item.name} construído!`, "success");
   };
 
-  const addTask = (taskData: Omit<Task, 'id' | 'createdAt' | 'completed'>) => {
-    const newTask: Task = {
-      ...taskData,
-      id: generateId(),
-      completed: false,
-      createdAt: Date.now()
-    };
-    setTasks([...tasks, newTask]);
-  };
-
-  const unlockLandmark = (currentGameState: GameState) => {
-    const allUnlocked = [...currentGameState.unlockedLandmarks, ...currentGameState.landmarkInventory];
-    const available = LANDMARK_CATALOG.filter(l => !allUnlocked.includes(l.id));
-    if (available.length === 0) return currentGameState; 
-    const selectedLandmark = available[Math.floor(Math.random() * available.length)];
-    const newGameState = {
-        ...currentGameState,
-        landmarkInventory: [...currentGameState.landmarkInventory, selectedLandmark.id]
-    };
-    showToast("Novo Monumento!", `Você desbloqueou: ${selectedLandmark.name}! Acesse o inventário.`, "success");
-    return newGameState;
-  };
-
-  const completeTask = async (id: string) => {
-    const taskIndex = tasks.findIndex(t => t.id === id);
-    if (taskIndex === -1) return;
-    
-    const task = tasks[taskIndex];
-    if (task.completed && !task.isRepeatable) return; 
-
-    let updatedTasks = [...tasks];
-    if (!task.isRepeatable) {
-      updatedTasks[taskIndex] = { ...task, completed: true };
-      setTasks(updatedTasks);
-    } 
-
-    let popGain = 0;
-    let budgetGain = 0;
-    let guaranteedRes = 0;
-    let chanceResExtra = 0;
-    let guaranteedPark = 0;
-    let chancePark = 0;
-    let guaranteedCom = 0;
-    let chanceCom = 0;
-    let guaranteedInd = 0;
-    let chanceInd = 0;
-
-    switch (task.difficulty) {
-      case TaskDifficulty.TRIVIAL:
-        popGain = 1 + Math.floor(Math.random() * 4); 
-        budgetGain = 3; 
-        guaranteedRes = 1; chanceResExtra = 0.01;
-        break;
-      case TaskDifficulty.EASY:
-        popGain = 10 + Math.floor(Math.random() * 5);
-        budgetGain = 32; 
-        guaranteedRes = 1; chanceResExtra = 0.25; chancePark = 0.50; chanceCom = 0.25;
-        break;
-      case TaskDifficulty.MEDIUM:
-        popGain = 30 + Math.floor(Math.random() * 10);
-        budgetGain = 94; 
-        guaranteedRes = 1; chanceResExtra = 0.50; guaranteedPark = 1; chanceCom = 0.50; chanceInd = 0.25;
-        break;
-      case TaskDifficulty.HARD:
-        popGain = 100 + Math.floor(Math.random() * 20);
-        budgetGain = 250; 
-        guaranteedRes = 2; chanceResExtra = 0.25; guaranteedPark = 1; guaranteedCom = 1; chanceInd = 0.50;
-        break;
-    }
-
-    let newStats = { ...stats };
-    let newBuildings = [...buildings];
-    let newGameState = { ...gameState };
-
-    if (newStats.budget < 0) {
-        popGain = Math.floor(popGain * 0.5);
-    }
-
-    newStats.population += popGain;
-    newStats.budget += budgetGain;
-    newStats.level = newStats.population >= 25000 ? 3 : newStats.population >= 10000 ? 2 : 1;
-
-    const checkBudgetMilestone = () => {
-        const threshold = 5000;
-        const currentMilestone = Math.floor(newStats.budget / threshold) * threshold;
-        
-        if (currentMilestone >= 5000 && !newGameState.budgetMilestonesReached.includes(currentMilestone)) {
-            newGameState.budgetMilestonesReached.push(currentMilestone);
-            const randomSpecial = SPECIAL_BUILDINGS[Math.floor(Math.random() * SPECIAL_BUILDINGS.length)];
-            newGameState.specialBuildingQueue.push(randomSpecial.id);
-            showToast("Franquia Chegou!", `${randomSpecial.name} obteve licença para construir na sua cidade.`, "success");
-        }
-    };
-    checkBudgetMilestone();
-
-    const checkAndAwardMilestone = (milestoneId: string) => {
-        if (!newGameState.claimedMilestones.includes(milestoneId)) {
-            newGameState = unlockLandmark(newGameState);
-            newGameState.claimedMilestones = [...newGameState.claimedMilestones, milestoneId];
-        }
-    };
-
-    if (newStats.population >= 2500) checkAndAwardMilestone('pop_2500');
-    if (newStats.population >= 5000) checkAndAwardMilestone('pop_5000');
-    if (newStats.population >= 10000) checkAndAwardMilestone('pop_10000');
-    if (newStats.population >= 20000) checkAndAwardMilestone('pop_20000');
-    if (newStats.population >= 30000) checkAndAwardMilestone('pop_30000');
-
-    // --- PERFECT DAY LOGIC (Using Virtual Game Day) ---
-    // If you complete tasks at 2 AM, they count for "Yesterday"
-    const todayGameDate = getGameDateString(); // "YYYY-MM-DD" adjusted -7h
-    const tasksForToday = updatedTasks.filter(t => t.dueDate === todayGameDate);
-    const totalToday = tasksForToday.length;
-    const completedToday = tasksForToday.filter(t => t.completed).length;
-
-    if (totalToday > 0 && completedToday === totalToday) {
-        if (newGameState.lastPerfectDay !== todayGameDate) {
-            const govData = generateBuildingData('gov', newStats.population);
-            const spot = findGridSpot(govData.w, govData.d, 'gov', newBuildings);
-            if(spot) {
-                newBuildings.push({
-                    id: generateId(), type: 'gov', x: spot.x, z: spot.z, rotation: spot.rotation, width: govData.w, depth: govData.d,
-                    levelTier: 1, style: govData.style, variant: govData.variant, isRare: govData.isRare
-                });
-                markOccupied(spot.x, spot.z, govData.w, govData.d, spot.rotation, 'gov'); 
-                ensureBlockRoads(spot.blockOriginX, spot.blockOriginZ, newBuildings);
-                newStats.govCount += 1;
-            }
-            newStats.budget += 1000;
-            newGameState.totalPerfectDays += 1;
-            
-            // Check streak using Date objects based on Game Day Strings
-            const yesterdayDate = new Date(todayGameDate);
-            yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-            const yesterdayStr = yesterdayDate.toISOString().split('T')[0];
-
-            if (newGameState.lastPerfectDay === yesterdayStr) {
-                newGameState.perfectDayStreak += 1;
-            } else {
-                newGameState.perfectDayStreak = 1;
-            }
-            newGameState.lastPerfectDay = todayGameDate;
-            if (newGameState.perfectDayStreak >= 5) checkAndAwardMilestone('streak_5');
-            if (newGameState.perfectDayStreak >= 10) checkAndAwardMilestone('streak_10');
-            if (newGameState.totalPerfectDays >= 15) checkAndAwardMilestone('total_15');
-            if (newGameState.totalPerfectDays >= 30) checkAndAwardMilestone('total_30');
-            if (newGameState.totalPerfectDays >= 60) checkAndAwardMilestone('total_60');
-        }
-    }
-
-    const add = (type: BuildingType) => {
-       if (newGameState.specialBuildingQueue.length > 0) {
-           const specialId = newGameState.specialBuildingQueue[0];
-           const specialDef = SPECIAL_BUILDINGS.find(b => b.id === specialId);
-           
-           if (specialDef && specialDef.type === type) {
-               const spot = findGridSpot(2, 2, specialDef.type, newBuildings);
-               if (spot) {
-                   newBuildings.push({
-                       id: generateId(),
-                       type: specialDef.type,
-                       x: spot.x, z: spot.z, rotation: spot.rotation,
-                       width: 2, depth: 2,
-                       levelTier: 3, 
-                       style: specialDef.id,
-                       variant: 0, isRare: true 
-                   });
-                   markOccupied(spot.x, spot.z, 2, 2, spot.rotation, specialDef.type);
-                   ensureBlockRoads(spot.blockOriginX, spot.blockOriginZ, newBuildings);
-                   
-                   newGameState.specialBuildingQueue.shift();
-                   return;
-               }
-           }
-       }
-
-       const data = generateBuildingData(type, newStats.population);
-       let pos = findGridSpot(data.w, data.d, type, newBuildings);
-       
-       if (pos) {
-          newBuildings.push({
-              id: generateId(),
-              type,
-              x: pos.x, z: pos.z, rotation: pos.rotation,
-              width: data.w, depth: data.d, 
-              levelTier: data.level, style: data.style,
-              variant: data.variant, isRare: data.isRare
-           });
-           
-           markOccupied(pos.x, pos.z, data.w, data.d, pos.rotation, type); 
-           ensureBlockRoads(pos.blockOriginX, pos.blockOriginZ, newBuildings);
-       }
-    };
-
-    if (newStats.budget >= 0) {
-        for(let i=0; i<guaranteedRes; i++) { add('res'); newStats.residentialCount++; }
-        if(Math.random() < chanceResExtra) { add('res'); newStats.residentialCount++; }
-        for(let i=0; i<guaranteedCom; i++) { add('com'); newStats.commercialCount++; }
-        if(Math.random() < chanceCom) { add('com'); newStats.commercialCount++; }
-        for(let i=0; i<guaranteedInd; i++) { add('ind'); newStats.industrialCount++; }
-        if(Math.random() < chanceInd) { add('ind'); newStats.industrialCount++; }
-        for(let i=0; i<guaranteedPark; i++) { add('park'); newStats.parksCount++; }
-        if(Math.random() < chancePark) { add('park'); newStats.parksCount++; }
-    }
-
-    setStats(newStats);
-    setBuildings(newBuildings); 
-    setGameState(newGameState);
-  };
-
-  const deleteTask = (id: string) => {
-    setTasks(tasks.filter(t => t.id !== id));
-  };
-
-  const toggleSubtask = (taskId: string, subtaskId: string) => {
-    setTasks(tasks.map(t => {
-      if (t.id === taskId) {
-        return {
-          ...t,
-          subtasks: t.subtasks.map(st => st.id === subtaskId ? { ...st, completed: !st.completed } : st)
-        };
+  const handleNewGame = () => {
+      if (window.confirm("Tem certeza? Todo o progresso será perdido.")) {
+          localStorage.removeItem('citytask_save_v1');
+          window.location.reload();
       }
-      return t;
-    }));
-  };
-
-  const debugGenerateCatalog = () => {
-    const newBuildings: Building[] = [];
-    occupiedTilesRef.current.clear(); 
-    roadTilesRef.current.clear();
-
-    let currentX = -MAP_LIMIT + 5;
-    let currentZ = -MAP_LIMIT + 5;
-    const rowHeight = 10; 
-    
-    const place = (partial: any) => {
-        if (currentX + partial.width > MAP_LIMIT - 2) {
-            currentX = -MAP_LIMIT + 5;
-            currentZ += rowHeight;
-        }
-        
-        newBuildings.push({
-            id: generateId(),
-            x: currentX,
-            z: currentZ,
-            rotation: 0,
-            ...partial
-        });
-        
-        for(let i=0; i<partial.width; i++) {
-            for(let j=0; j<partial.depth; j++) {
-                occupiedTilesRef.current.add(`${currentX+i},${currentZ+j}`);
-            }
-        }
-
-        const roadX = currentX + Math.floor((partial.width - 1) / 2);
-        const roadZ = currentZ + partial.depth;
-
-        newBuildings.push({
-            id: generateId(), type: 'road', x: roadX, z: roadZ, rotation: 0, width: 1, depth: 1,
-            levelTier: 1, style: 'road', variant: 0, isRare: false
-        });
-        occupiedTilesRef.current.add(`${roadX},${roadZ}`);
-        roadTilesRef.current.add(`${roadX},${roadZ}`);
-        
-        currentX += partial.width + 3; 
-    };
-
-    LANDMARK_CATALOG.forEach(l => {
-        place({ 
-            type: 'landmark', 
-            width: l.w, 
-            depth: l.d, 
-            style: l.id, 
-            landmarkId: l.id, 
-            levelTier: 3, 
-            variant: 0, 
-            isRare: true 
-        });
-    });
-
-    currentZ += rowHeight + 5;
-    currentX = -MAP_LIMIT + 5;
-
-    SPECIAL_BUILDINGS.forEach(s => {
-        place({
-            type: s.type,
-            width: 2, depth: 2,
-            style: s.id,
-            levelTier: 3,
-            variant: 0, isRare: true
-        });
-    });
-    
-    currentZ += rowHeight + 5;
-    currentX = -MAP_LIMIT + 5;
-
-    const types: BuildingType[] = ['gov', 'res', 'com', 'ind', 'park'];
-    types.forEach(type => {
-        // @ts-ignore
-        const tiers = BUILDING_CATALOG[type];
-        if (!tiers) return;
-
-        Object.keys(tiers).forEach(tierLevel => {
-            const list = tiers[tierLevel];
-            list.forEach((item: any) => {
-                [0, 1].forEach(v => {
-                    [false, true].forEach(r => {
-                        place({ 
-                            type, 
-                            width: item.w, 
-                            depth: item.d, 
-                            style: item.id, 
-                            levelTier: parseInt(tierLevel), 
-                            variant: v, 
-                            isRare: r 
-                        });
-                    });
-                });
-            });
-        });
-        currentX = -MAP_LIMIT + 5;
-        currentZ += rowHeight + 5;
-    });
-
-    setBuildings(newBuildings);
-    setStats({ ...stats, population: 999999, budget: 99999999 });
   };
 
   return (
-    <div className="flex flex-col md:flex-row h-screen w-full bg-gray-900 relative">
-      
-      {/* --- NOTIFICATION TOAST --- */}
-      {notification && (
-          <div className="fixed top-4 right-4 z-[100] animate-in slide-in-from-right fade-in duration-300 pointer-events-none">
-              <div className={`
-                  flex items-start gap-3 p-4 rounded-xl shadow-2xl border backdrop-blur-md min-w-[300px] max-w-sm
-                  ${notification.type === 'success' ? 'bg-green-900/90 border-green-500 text-green-100' : 
-                    notification.type === 'error' ? 'bg-red-900/90 border-red-500 text-red-100' :
-                    notification.type === 'warning' ? 'bg-yellow-900/90 border-yellow-500 text-yellow-100' :
-                    'bg-gray-800/90 border-cyan-500 text-gray-100'}
-              `}>
-                  <div className="mt-0.5">
-                      {notification.type === 'success' && <CheckCircle className="w-5 h-5" />}
-                      {notification.type === 'error' && <AlertTriangle className="w-5 h-5" />}
-                      {notification.type === 'warning' && <AlertTriangle className="w-5 h-5" />}
-                      {notification.type === 'info' && <Info className="w-5 h-5" />}
-                  </div>
-                  <div className="flex-1">
-                      <h4 className="font-bold text-sm mb-1">{notification.title}</h4>
-                      <p className="text-xs opacity-90 leading-relaxed">{notification.message}</p>
-                  </div>
-              </div>
-          </div>
-      )}
+    <div className="flex h-screen w-screen bg-gray-900 text-white overflow-hidden font-sans select-none relative">
+      {/* Background World Map / Grid (Abstract) */}
+      <div className="absolute inset-0 z-0 opacity-20 pointer-events-none" 
+           style={{ 
+               backgroundImage: 'linear-gradient(#334155 1px, transparent 1px), linear-gradient(90deg, #334155 1px, transparent 1px)', 
+               backgroundSize: '40px 40px' 
+           }}>
+      </div>
 
-      {/* --- IMPORT CONFIRMATION MODAL --- */}
+      {/* RIGHT PANEL: City View (Now on Left) */}
+      <div className="flex-1 relative h-full flex flex-col min-w-0">
+         <CityDisplay 
+            stats={stats} 
+            buildings={buildings} 
+            onDebugGenerate={handleDebugGenerate}
+            landmarkInventory={gameState.landmarkInventory}
+            landmarkCatalog={LANDMARK_CATALOG}
+            onStartPlacement={handleStartPlacement}
+            placementMode={placementMode}
+            onCancelPlacement={handleCancelPlacement}
+            onConfirmPlacement={handleConfirmPlacement}
+            onCheatBudget={handleCheatBudget}
+            onCheatPopulation={handleCheatPopulation}
+            onUnlockVehicles={handleUnlockVehicles}
+            unlockedVehicles={gameState.unlockedVehicles}
+            onExportSave={handleExportSave}
+            onImportSave={handleImportSaveRequest}
+            onNewGame={handleNewGame}
+         />
+         
+         {/* Widgets Overlay */}
+         <ClockWidget gameCreatedAt={gameState.createdAt} />
+         <MediaPlayer />
+      </div>
+
+      {/* LEFT PANEL: Tasks & Management (Now on Right) */}
+      <div className="w-96 flex flex-col z-10 h-full border-l border-gray-700 bg-gray-900/90 backdrop-blur">
+        <TaskList 
+          tasks={tasks}
+          onAddTask={handleAddTask}
+          onCompleteTask={handleCompleteTask}
+          onDeleteTask={handleDeleteTask}
+          onToggleSubtask={handleToggleSubtask}
+          onEditTask={handleEditTask}
+          onReorderTasks={handleReorderTasks}
+        />
+      </div>
+
+      {/* Notification Toast (Centered at Bottom) */}
+      {notification && (
+           <div className={`fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] px-6 py-3 rounded-2xl shadow-2xl border flex items-center gap-4 animate-in slide-in-from-bottom-5 duration-300 ${
+               notification.type === 'success' ? 'bg-green-900/90 border-green-500 text-green-100' :
+               notification.type === 'warning' ? 'bg-orange-900/90 border-orange-500 text-orange-100' :
+               notification.type === 'error' ? 'bg-red-900/90 border-red-500 text-red-100' :
+               'bg-blue-900/90 border-blue-500 text-blue-100'
+           }`}>
+               {notification.type === 'success' ? <CheckCircle className="w-6 h-6" /> : 
+                notification.type === 'warning' ? <AlertTriangle className="w-6 h-6" /> : 
+                <Info className="w-6 h-6" />}
+               <div>
+                   <div className="font-bold text-base">{notification.title}</div>
+                   <div className="text-sm opacity-90">{notification.message}</div>
+               </div>
+           </div>
+       )}
+
+      {/* IMPORT MODAL */}
       {isImportModalOpen && (
-          <div className="fixed inset-0 z-[110] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-              <div className="bg-gray-800 border border-gray-600 rounded-2xl shadow-2xl max-w-md w-full p-6 text-center">
-                  <div className="w-16 h-16 bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <AlertTriangle className="w-8 h-8 text-red-500" />
+          <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+              <div className="bg-gray-800 border border-gray-600 p-6 rounded-xl shadow-2xl max-w-sm w-full text-center">
+                  <div className="w-16 h-16 bg-blue-900/50 rounded-full flex items-center justify-center mx-auto mb-4 border-2 border-blue-500">
+                      <Upload className="w-8 h-8 text-blue-400" />
                   </div>
-                  <h3 className="text-xl font-bold text-white mb-2">Sobrescrever Jogo?</h3>
+                  <h3 className="text-xl font-bold text-white mb-2">Restaurar Save?</h3>
                   <p className="text-gray-400 text-sm mb-6">
-                      Ao importar este backup, <strong>todo o progresso atual será perdido</strong> irremediavelmente. 
-                      <br/><br/>
-                      Deseja continuar?
+                      Isso irá sobrescrever todo o progresso atual da cidade com o arquivo selecionado. Tem certeza?
                   </p>
                   <div className="flex gap-3">
                       <button 
-                        onClick={() => { setPendingImportFile(null); setIsImportModalOpen(false); }}
-                        className="flex-1 py-3 rounded-lg bg-gray-700 hover:bg-gray-600 text-white font-medium transition-colors"
+                        onClick={() => { setIsImportModalOpen(false); setPendingImportFile(null); }}
+                        className="flex-1 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300 font-medium transition-colors"
                       >
                           Cancelar
                       </button>
                       <button 
                         onClick={confirmImportSave}
-                        className="flex-1 py-3 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold flex items-center justify-center gap-2 transition-colors"
+                        className="flex-1 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold transition-colors shadow-lg shadow-blue-900/20"
                       >
-                          <Upload className="w-4 h-4" /> Importar
+                          Confirmar
                       </button>
                   </div>
               </div>
           </div>
       )}
-
-      <MediaPlayer />
-
-      {/* CITY DISPLAY */}
-      <div className="w-full md:w-[72%] lg:w-[82%] h-1/2 md:h-full relative order-2 md:order-1">
-        <CityDisplay 
-          stats={stats} 
-          buildings={buildings}
-          onDebugGenerate={debugGenerateCatalog}
-          landmarkInventory={gameState.landmarkInventory}
-          landmarkCatalog={LANDMARK_CATALOG}
-          onStartPlacement={handleStartPlacement}
-          placementMode={placementMode}
-          onCancelPlacement={handleCancelPlacement}
-          onConfirmPlacement={handleConfirmPlacement}
-          onCheatBudget={handleCheatBudget}
-          onCheatPopulation={handleCheatPopulation}
-          onUnlockVehicles={handleUnlockVehicles}
-          unlockedVehicles={gameState.unlockedVehicles}
-          onExportSave={handleExportSave}
-          onImportSave={handleImportSaveRequest}
-        />
-        <ClockWidget gameCreatedAt={gameState.createdAt} />
-      </div>
-
-      {/* TASK LIST */}
-      <div className="w-full md:w-[28%] lg:w-[18%] h-1/2 md:h-full z-20 order-1 md:order-2">
-        <TaskList 
-          tasks={tasks} 
-          onAddTask={addTask} 
-          onCompleteTask={completeTask} 
-          onDeleteTask={deleteTask}
-          onToggleSubtask={toggleSubtask}
-        />
-      </div>
-
     </div>
   );
 }

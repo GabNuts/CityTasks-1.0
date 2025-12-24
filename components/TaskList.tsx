@@ -1,7 +1,7 @@
 
-import React, { useState } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { Task, TaskDifficulty, FrequencyType, SubTask } from '../types';
-import { Plus, Check, Trash2, Zap, AlertTriangle, Calendar, Repeat, ChevronDown, ChevronUp, Tag, Filter, X } from 'lucide-react';
+import { Plus, Check, Trash2, Zap, AlertTriangle, Calendar, Repeat, ChevronDown, ChevronUp, Tag, Filter, X, ListFilter, Pencil, GripVertical } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { getGameDateString } from '../utils/timeHelpers';
 
@@ -11,17 +11,24 @@ interface TaskListProps {
   onCompleteTask: (id: string) => void;
   onDeleteTask: (id: string) => void;
   onToggleSubtask: (taskId: string, subtaskId: string) => void;
+  onEditTask?: (task: Task) => void;
+  onReorderTasks?: (tasks: Task[]) => void;
 }
 
-const TaskList: React.FC<TaskListProps> = ({ tasks, onAddTask, onCompleteTask, onDeleteTask, onToggleSubtask }) => {
+const TaskList: React.FC<TaskListProps> = ({ tasks, onAddTask, onCompleteTask, onDeleteTask, onToggleSubtask, onEditTask, onReorderTasks }) => {
   // --- States ---
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [filterType, setFilterType] = useState<'all' | 'today' | 'tomorrow' | 'urgent' | 'tag'>('today');
   const [selectedTag, setSelectedTag] = useState<string>('');
   const [openDetailId, setOpenDetailId] = useState<string | null>(null);
+  
+  // Edit Mode State
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+
+  // Drag & Drop State
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
 
   // --- Form State ---
-  // Use Game Date String to determine "Today" in form defaults
   const initialFormState = {
     title: '',
     description: '',
@@ -42,7 +49,37 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onAddTask, onCompleteTask, o
   const [newSubtaskInput, setNewSubtaskInput] = useState('');
 
   // --- Helpers ---
-  const resetForm = () => setFormData({ ...initialFormState, dueDate: getGameDateString() });
+  const resetForm = () => {
+      setFormData({ ...initialFormState, dueDate: getGameDateString() });
+      setEditingTask(null);
+  };
+
+  const openEditModal = (task: Task) => {
+      setEditingTask(task);
+      setFormData({
+          title: task.title,
+          description: task.description || '',
+          difficulty: task.difficulty,
+          dueDate: task.dueDate || getGameDateString(),
+          isUrgent: task.isUrgent,
+          isRepeatable: task.isRepeatable,
+          tags: task.tags,
+          subtasks: task.subtasks,
+          frequency: task.recurrence.type,
+          freqWeekDays: task.recurrence.weekDays || [],
+          freqMonthDay: task.recurrence.monthDay || 1,
+          freqCustomValue: task.recurrence.customValue || 1,
+          freqCustomUnit: task.recurrence.customUnit || 'day'
+      });
+      setIsModalOpen(true);
+  };
+
+  // Extract all unique tags from existing tasks for the suggestion list
+  const existingTags = useMemo(() => {
+    const tags = new Set<string>();
+    tasks.forEach(t => t.tags.forEach(tag => tags.add(tag)));
+    return Array.from(tags);
+  }, [tasks]);
 
   const handleAddSubtask = () => {
     if (!newSubtaskInput.trim()) return;
@@ -56,11 +93,15 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onAddTask, onCompleteTask, o
   const handleAddTag = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && newTagInput.trim()) {
       e.preventDefault();
-      if (!formData.tags.includes(newTagInput.trim())) {
-        setFormData(prev => ({ ...prev, tags: [...prev.tags, newTagInput.trim()] }));
-      }
-      setNewTagInput('');
+      addTagToForm(newTagInput.trim());
     }
+  };
+
+  const addTagToForm = (tag: string) => {
+    if (!formData.tags.includes(tag)) {
+      setFormData(prev => ({ ...prev, tags: [...prev.tags, tag] }));
+    }
+    setNewTagInput('');
   };
 
   const removeTag = (tag: string) => {
@@ -71,23 +112,46 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onAddTask, onCompleteTask, o
     e.preventDefault();
     if (!formData.title.trim()) return;
 
-    onAddTask({
-      title: formData.title,
-      description: formData.description,
-      difficulty: formData.difficulty,
-      dueDate: formData.dueDate,
-      isUrgent: formData.isUrgent,
-      isRepeatable: formData.isRepeatable,
-      tags: formData.tags,
-      subtasks: formData.subtasks,
-      recurrence: {
-        type: formData.frequency,
-        weekDays: formData.frequency === 'weekly' ? formData.freqWeekDays : undefined,
-        monthDay: formData.frequency === 'monthly' ? formData.freqMonthDay : undefined,
-        customValue: formData.frequency === 'custom' ? formData.freqCustomValue : undefined,
-        customUnit: formData.frequency === 'custom' ? formData.freqCustomUnit : undefined,
-      }
-    });
+    if (editingTask && onEditTask) {
+        // Update existing task
+        onEditTask({
+            ...editingTask,
+            title: formData.title,
+            description: formData.description,
+            difficulty: formData.difficulty,
+            dueDate: formData.dueDate,
+            isUrgent: formData.isUrgent,
+            isRepeatable: formData.isRepeatable,
+            tags: formData.tags,
+            subtasks: formData.subtasks,
+            recurrence: {
+                type: formData.frequency,
+                weekDays: formData.frequency === 'weekly' ? formData.freqWeekDays : undefined,
+                monthDay: formData.frequency === 'monthly' ? formData.freqMonthDay : undefined,
+                customValue: formData.frequency === 'custom' ? formData.freqCustomValue : undefined,
+                customUnit: formData.frequency === 'custom' ? formData.freqCustomUnit : undefined,
+            }
+        });
+    } else {
+        // Create new task
+        onAddTask({
+            title: formData.title,
+            description: formData.description,
+            difficulty: formData.difficulty,
+            dueDate: formData.dueDate,
+            isUrgent: formData.isUrgent,
+            isRepeatable: formData.isRepeatable,
+            tags: formData.tags,
+            subtasks: formData.subtasks,
+            recurrence: {
+                type: formData.frequency,
+                weekDays: formData.frequency === 'weekly' ? formData.freqWeekDays : undefined,
+                monthDay: formData.frequency === 'monthly' ? formData.freqMonthDay : undefined,
+                customValue: formData.frequency === 'custom' ? formData.freqCustomValue : undefined,
+                customUnit: formData.frequency === 'custom' ? formData.freqCustomUnit : undefined,
+            }
+        });
+    }
     setIsModalOpen(false);
     resetForm();
   };
@@ -101,40 +165,91 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onAddTask, onCompleteTask, o
     });
   };
 
-  // --- Filtering & Sorting ---
+  // --- Drag & Drop Handlers ---
+  const handleDragStart = (e: React.DragEvent, id: string) => {
+      setDraggedTaskId(id);
+      e.dataTransfer.effectAllowed = "move";
+      // Opacity hack for drag ghost if needed
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+  };
+
+  const handleDrop = (e: React.DragEvent, targetId: string) => {
+      e.preventDefault();
+      if (!draggedTaskId || !onReorderTasks || draggedTaskId === targetId) return;
+
+      const sourceIndex = tasks.findIndex(t => t.id === draggedTaskId);
+      const targetIndex = tasks.findIndex(t => t.id === targetId);
+
+      if (sourceIndex === -1 || targetIndex === -1) return;
+
+      const newTasks = [...tasks];
+      const [removed] = newTasks.splice(sourceIndex, 1);
+      newTasks.splice(targetIndex, 0, removed);
+
+      onReorderTasks(newTasks);
+      setDraggedTaskId(null);
+  };
+
+  // --- Filtering Logic (Modified) ---
   const getFilteredTasks = () => {
-    const today = getGameDateString();
+    const todayStr = getGameDateString();
     
-    // Calculate Tomorrow based on Game Date
-    const tomorrowDate = new Date(today); // Use the string YYYY-MM-DD to create date at midnight local (or UTC depending on browser, but consistent)
-    // Actually, safest way is to parse the string to avoid timezone shifts when creating the object
-    const [y, m, d] = today.split('-').map(Number);
-    const tDate = new Date(y, m - 1, d); // Month is 0-indexed
-    tDate.setDate(tDate.getDate() + 1);
-    const tmY = tDate.getFullYear();
-    const tmM = String(tDate.getMonth() + 1).padStart(2, '0');
-    const tmD = String(tDate.getDate()).padStart(2, '0');
-    const tomorrow = `${tmY}-${tmM}-${tmD}`;
+    // Create Date objects correctly avoiding timezone issues by splitting
+    const [y, m, d] = todayStr.split('-').map(Number);
+    const todayDate = new Date(y, m - 1, d);
+    const currentWeekDay = todayDate.getDay(); // 0-6
+
+    // Calculate Tomorrow
+    const tomorrowDate = new Date(todayDate);
+    tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+    const tmY = tomorrowDate.getFullYear();
+    const tmM = String(tomorrowDate.getMonth() + 1).padStart(2, '0');
+    const tmD = String(tomorrowDate.getDate()).padStart(2, '0');
+    const tomorrowStr = `${tmY}-${tmM}-${tmD}`;
+    const tomorrowWeekDay = tomorrowDate.getDay();
 
     let filtered = tasks;
 
+    // Filter Logic
     if (filterType === 'today') {
-      filtered = tasks.filter(t => t.dueDate === today || (!t.dueDate && !t.completed));
+      filtered = tasks.filter(t => {
+        if (t.completed && !t.isRepeatable) return false;
+        if (t.recurrence.type === 'weekly' && t.recurrence.weekDays) return t.recurrence.weekDays.includes(currentWeekDay);
+        if (t.recurrence.type === 'daily') return true;
+        if (t.dueDate) return t.dueDate <= todayStr;
+        return true;
+      });
     } else if (filterType === 'tomorrow') {
-      filtered = tasks.filter(t => t.dueDate === tomorrow);
+      filtered = tasks.filter(t => {
+        if (t.recurrence.type === 'weekly' && t.recurrence.weekDays) return t.recurrence.weekDays.includes(tomorrowWeekDay);
+        if (t.recurrence.type === 'daily') return true;
+        return t.dueDate === tomorrowStr;
+      });
     } else if (filterType === 'urgent') {
       filtered = tasks.filter(t => t.isUrgent);
     } else if (filterType === 'tag' && selectedTag) {
       filtered = tasks.filter(t => t.tags.includes(selectedTag));
     }
 
-    // Sorting: Urgent > Date > Completed (Last)
-    return filtered.sort((a, b) => {
-      if (a.completed !== b.completed) return a.completed ? 1 : -1;
-      if (a.isUrgent !== b.isUrgent) return a.isUrgent ? -1 : 1;
-      if (a.dueDate && b.dueDate) return a.dueDate.localeCompare(b.dueDate);
-      return 0;
-    });
+    // Sorting Logic
+    // If viewing "All" or "Manual", we respect the user's Drag & Drop order (array order).
+    // If viewing Today/Tomorrow/Urgent, we apply a helpful sort but keep D&D disabled visually if needed or allow reorder within filter.
+    // For now, let's only auto-sort if NOT in 'all' mode to allow manual override.
+    if (filterType !== 'all') {
+        return filtered.sort((a, b) => {
+            if (a.completed !== b.completed) return a.completed ? 1 : -1;
+            if (a.isUrgent !== b.isUrgent) return a.isUrgent ? -1 : 1;
+            const dateA = a.dueDate || '9999-99-99';
+            const dateB = b.dueDate || '9999-99-99';
+            return dateA.localeCompare(dateB);
+        });
+    }
+    
+    return filtered;
   };
 
   const getDifficultyColor = (diff: TaskDifficulty) => {
@@ -146,75 +261,92 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onAddTask, onCompleteTask, o
     }
   };
 
-  const allTags = Array.from(new Set(tasks.flatMap(t => t.tags)));
+  const handleFilterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+      const val = e.target.value;
+      if (val.startsWith('tag:')) {
+          setFilterType('tag');
+          setSelectedTag(val.replace('tag:', ''));
+      } else {
+          setFilterType(val as any);
+          setSelectedTag('');
+      }
+  };
+
+  const displayTasks = getFilteredTasks();
 
   return (
     <div className="flex flex-col h-full bg-gray-800/50 backdrop-blur-md border-l border-gray-700 shadow-2xl overflow-hidden relative">
       
-      {/* Header & Filter Bar */}
+      {/* Header & Unified Filter Control */}
       <div className="p-4 border-b border-gray-700 bg-gray-900/50">
-        <h2 className="text-xl font-bold mb-4 flex items-center justify-between text-cyan-400">
-          <span className="flex items-center gap-2"><Zap className="w-5 h-5" /> Tarefas</span>
-          <button 
-            onClick={() => setIsModalOpen(true)}
-            className="bg-cyan-600 hover:bg-cyan-500 text-white p-2 rounded-lg transition-colors"
-            title="Nova Tarefa"
-          >
-            <Plus className="w-5 h-5" />
-          </button>
-        </h2>
+        <div className="flex items-center justify-between gap-2">
+            <h2 className="text-xl font-bold flex items-center gap-2 text-cyan-400 whitespace-nowrap">
+                <Zap className="w-5 h-5" /> Tarefas
+            </h2>
+            
+            {/* COMPACT FILTER SELECT */}
+            <div className="flex-1 max-w-[180px] relative">
+                <div className="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none text-gray-400">
+                    <ListFilter size={14} />
+                </div>
+                <select 
+                    value={filterType === 'tag' ? `tag:${selectedTag}` : filterType}
+                    onChange={handleFilterChange}
+                    className="w-full bg-gray-800 border border-gray-600 text-white text-xs rounded-lg pl-8 pr-2 py-2 appearance-none focus:border-cyan-500 focus:outline-none cursor-pointer hover:bg-gray-700 transition-colors"
+                >
+                    <option value="today">📅 Hoje</option>
+                    <option value="tomorrow">🌅 Amanhã</option>
+                    <option value="urgent">🚨 Urgente</option>
+                    <option value="all">📚 Todas (Manual)</option>
+                    {existingTags.length > 0 && <optgroup label="Tags">
+                        {existingTags.map(tag => (
+                            <option key={tag} value={`tag:${tag}`}>🏷️ {tag}</option>
+                        ))}
+                    </optgroup>}
+                </select>
+                <div className="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none text-gray-500">
+                    <ChevronDown size={12} />
+                </div>
+            </div>
 
-        {/* Filters Scrollbar */}
-        <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-2">
-          <button 
-            onClick={() => setFilterType('today')}
-            className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-colors border ${filterType === 'today' ? 'bg-cyan-500/20 border-cyan-500 text-cyan-300' : 'border-gray-600 text-gray-400 hover:bg-gray-700'}`}
-          >
-            Hoje (Virtual)
-          </button>
-          <button 
-            onClick={() => setFilterType('tomorrow')}
-            className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-colors border ${filterType === 'tomorrow' ? 'bg-cyan-500/20 border-cyan-500 text-cyan-300' : 'border-gray-600 text-gray-400 hover:bg-gray-700'}`}
-          >
-            Amanhã
-          </button>
-          <button 
-            onClick={() => setFilterType('urgent')}
-            className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-colors border ${filterType === 'urgent' ? 'bg-red-500/20 border-red-500 text-red-300' : 'border-gray-600 text-gray-400 hover:bg-gray-700'}`}
-          >
-            Urgente
-          </button>
-          <button 
-            onClick={() => setFilterType('all')}
-            className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-colors border ${filterType === 'all' ? 'bg-cyan-500/20 border-cyan-500 text-cyan-300' : 'border-gray-600 text-gray-400 hover:bg-gray-700'}`}
-          >
-            Todas
-          </button>
-          {allTags.map(tag => (
-             <button 
-             key={tag}
-             onClick={() => { setFilterType('tag'); setSelectedTag(tag); }}
-             className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-colors border flex items-center gap-1 ${filterType === 'tag' && selectedTag === tag ? 'bg-purple-500/20 border-purple-500 text-purple-300' : 'border-gray-600 text-gray-400 hover:bg-gray-700'}`}
-           >
-             <Tag className="w-3 h-3" /> {tag}
-           </button>
-          ))}
+            <button 
+                onClick={() => { resetForm(); setIsModalOpen(true); }}
+                className="bg-cyan-600 hover:bg-cyan-500 text-white p-2 rounded-lg transition-colors shadow-lg shadow-cyan-900/20"
+                title="Nova Tarefa"
+            >
+                <Plus className="w-5 h-5" />
+            </button>
         </div>
       </div>
 
       {/* Task List */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-hide">
-        {getFilteredTasks().length === 0 && (
-          <div className="text-center text-gray-500 italic mt-10">
-            Nada por aqui...
+        {displayTasks.length === 0 && (
+          <div className="text-center text-gray-500 italic mt-10 flex flex-col items-center gap-2">
+            <Check className="w-10 h-10 opacity-20" />
+            <p>Nada por aqui...</p>
           </div>
         )}
         
-        {getFilteredTasks().map((task) => (
-          <div key={task.id} className={`group bg-gray-900 border ${task.isUrgent && !task.completed ? 'border-red-900/60 shadow-red-900/10' : 'border-gray-700'} rounded-xl transition-all hover:border-cyan-500/30 ${task.completed ? 'opacity-50 order-last' : ''}`}>
+        {displayTasks.map((task) => (
+          <div 
+            key={task.id} 
+            draggable={onReorderTasks && filterType === 'all'}
+            onDragStart={(e) => handleDragStart(e, task.id)}
+            onDragOver={handleDragOver}
+            onDrop={(e) => handleDrop(e, task.id)}
+            className={`group bg-gray-900 border ${task.isUrgent && !task.completed ? 'border-red-900/60 shadow-red-900/10' : 'border-gray-700'} rounded-xl transition-all hover:border-cyan-500/30 ${task.completed ? 'opacity-50 order-last' : ''} ${draggedTaskId === task.id ? 'opacity-30 border-dashed border-cyan-500' : ''}`}
+          >
             
             {/* Task Card Header (Compact) */}
             <div className="p-3 flex items-start gap-3">
+              {/* Drag Handle (Visible only in All mode or if reorder enabled) */}
+              {filterType === 'all' && (
+                  <div className="mt-1.5 text-gray-600 hover:text-gray-400 cursor-grab active:cursor-grabbing">
+                      <GripVertical size={14} />
+                  </div>
+              )}
+
               <button
                 onClick={() => onCompleteTask(task.id)}
                 className={`mt-1 w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${task.completed ? 'bg-green-500/20 border-green-500 text-green-500' : 'border-gray-500 hover:border-cyan-500 text-transparent hover:text-cyan-500'}`}
@@ -239,12 +371,15 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onAddTask, onCompleteTask, o
                   <span className={`px-1.5 py-0.5 rounded border ${getDifficultyColor(task.difficulty)}`}>
                     {task.difficulty}
                   </span>
-                  {task.dueDate && (
-                     <span className="text-gray-400 flex items-center gap-1">
+                  
+                  {/* DATA: SÓ MOSTRA SE FOR URGENTE */}
+                  {task.isUrgent && task.dueDate && (
+                     <span className="text-red-400 flex items-center gap-1 font-bold">
                        <Calendar className="w-3 h-3" />
                        {new Date(task.dueDate).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
                      </span>
                   )}
+
                   {task.tags.slice(0, 2).map(t => (
                     <span key={t} className="text-purple-300 bg-purple-900/30 px-1.5 py-0.5 rounded">#{t}</span>
                   ))}
@@ -257,12 +392,23 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onAddTask, onCompleteTask, o
                 </div>
               </div>
 
-              <button
-                onClick={() => onDeleteTask(task.id)}
-                className="p-1.5 text-gray-600 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+              {/* Action Buttons */}
+              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    onClick={() => openEditModal(task)}
+                    className="p-1.5 text-gray-600 hover:text-blue-400 transition-colors"
+                    title="Editar"
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => onDeleteTask(task.id)}
+                    className="p-1.5 text-gray-600 hover:text-red-400 transition-colors"
+                    title="Excluir"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+              </div>
             </div>
 
             {/* Collapsible Details */}
@@ -293,11 +439,11 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onAddTask, onCompleteTask, o
         ))}
       </div>
 
-      {/* CREATE TASK MODAL */}
+      {/* CREATE/EDIT TASK MODAL */}
       {isModalOpen && (
         <div className="absolute inset-0 z-50 bg-gray-900/95 backdrop-blur-sm p-4 flex flex-col animate-in fade-in zoom-in-95 duration-200">
           <div className="flex justify-between items-center mb-4">
-            <h3 className="text-lg font-bold text-white">Nova Tarefa</h3>
+            <h3 className="text-lg font-bold text-white">{editingTask ? 'Editar Tarefa' : 'Nova Tarefa'}</h3>
             <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-white">
               <X className="w-6 h-6" />
             </button>
@@ -450,6 +596,20 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onAddTask, onCompleteTask, o
                 className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white focus:border-cyan-500 focus:outline-none"
                 placeholder="Ex: trabalho, saúde..."
               />
+              {/* Tag Suggestions (Existing Tags Cloud) */}
+              {existingTags.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                      {existingTags.filter(t => !formData.tags.includes(t)).map(tag => (
+                          <button
+                            key={tag}
+                            onClick={() => addTagToForm(tag)}
+                            className="text-[10px] bg-gray-800 border border-gray-600 text-gray-400 px-2 py-1 rounded-full hover:bg-gray-700 hover:text-white transition-colors"
+                          >
+                              {tag}
+                          </button>
+                      ))}
+                  </div>
+              )}
             </div>
 
             {/* Subtasks */}
@@ -480,7 +640,7 @@ const TaskList: React.FC<TaskListProps> = ({ tasks, onAddTask, onCompleteTask, o
             onClick={handleSubmit}
             className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-3 rounded-lg mt-4 shadow-lg shadow-cyan-900/20"
           >
-            Criar Tarefa
+            {editingTask ? 'Salvar Alterações' : 'Criar Tarefa'}
           </button>
         </div>
       )}
